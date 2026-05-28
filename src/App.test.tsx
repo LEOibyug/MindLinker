@@ -3158,6 +3158,55 @@ describe("MindLinker shell", () => {
     expect(formula?.querySelectorAll(".mfrac").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("renders fenced math blocks without leaking backticks or splitting formula meaning", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await configureMockChatApi(
+      user,
+      "Log-sum不等式为：\n\n```math\n\\sum_i a_i \\log\\frac{a_i}{b_i} \\ge \\left(\\sum_i a_i\\right) \\log\\frac{\\sum_i a_i}{\\sum_i b_i}\n```\n\n等号成立当且仅当对所有 `i`，`a_i/b_i` 为常数。"
+    );
+
+    await user.type(screen.getByLabelText("学习问题"), "讲 log-sum inequality");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    await waitFor(() => expect(document.querySelector(".formula-block .katex")).toBeInTheDocument());
+    const formula = document.querySelector<HTMLElement>(".formula-block");
+    expect(formula?.dataset.selectableText).toContain("\\sum_i a_i \\log\\frac{a_i}{b_i}");
+    expect(formula?.dataset.selectableText).toContain("\\left(\\sum_i a_i\\right) \\log\\frac{\\sum_i a_i}{\\sum_i b_i}");
+    expect(formula?.dataset.selectableText).not.toContain("```");
+    expect(formula?.dataset.selectableText).not.toContain("math");
+    expect(formula?.querySelectorAll(".mfrac").length).toBeGreaterThanOrEqual(2);
+    const answer = screen.getByRole("article", { name: "回答正文" });
+    expect(answer).not.toHaveTextContent("```");
+    expect(answer.querySelectorAll("code.inline-code").length).toBe(0);
+    expect(screen.getByText(/等号成立当且仅当对所有/)).toBeInTheDocument();
+    expect(screen.getByText(/为常数/)).toBeInTheDocument();
+    expect(answer.querySelector(".inline-math .mfrac")).toBeInTheDocument();
+  });
+
+  it("asks the model not to use code fences or inline code for mathematical notation", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(window, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "公式格式约束测试。" } }] })
+    } as Response);
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+
+    await user.type(screen.getByLabelText("学习问题"), "讲 log-sum inequality");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    await screen.findByText("公式格式约束测试。");
+    const requestText = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body ?? "")).messages[0].content[0].text;
+    expect(requestText).toContain("不要使用 ```math");
+    expect(requestText).toContain("不要把数学符号写成行内代码");
+    expect(requestText).toContain("错误示例：`i`、`a_i/b_i`");
+  });
+
   it("strips malformed explanation markers from rendered model answers", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();

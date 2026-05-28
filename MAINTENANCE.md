@@ -146,3 +146,19 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "prompt|marker|formula|math|title|位置提问|rewrite|重写|inline question|strict"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - Fenced Math And Inline Code Cleanup
+
+- Fixed model replies that wrap display formulas in Markdown code fences such as ` ```math ` so backticks no longer leak into the reader.
+- Fenced math content is now parsed as a formula block and rendered through KaTeX.
+- Inline backtick snippets that are only mathematical symbols, such as `i` or `a_i/b_i`, no longer render as gray code pills.
+- Tightened the math formula prompt to forbid code fences and inline-code formatting for math notation.
+- Regression coverage:
+  - fenced Log-sum formulas render as a single formula block without leaked backticks or `math` labels;
+  - simple mathematical inline-code snippets do not become visible code pills;
+  - main-answer prompts explicitly discourage code fences and inline-code math.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "fenced math blocks|code fences or inline code"`
+  - `npm test -- src/App.test.tsx -t "formula|math|markdown wrappers|inline math|inline code|fenced|code fences|backticks"`
+  - `npm test`
+  - `npm run build`

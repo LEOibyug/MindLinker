@@ -427,6 +427,8 @@ const mathFormulaProtocol = `<math_formula_protocol>
 - 行内公式使用 $...$ 或 \\(...\\)，不要写成 \\$...\\$。
 - 块级公式必须使用三行标准格式：第一行只写 $$，第二行只写公式本体，第三行只写 $$。
 - $$ 所在行只能包含 $$，不能包含“即”“公式为”等任何正文。
+- 不要使用 \`\`\`math、\`\`\`latex 或任何代码围栏包裹数学公式。
+- 不要把数学符号写成行内代码；错误示例：\`i\`、\`a_i/b_i\`；正确写法：$i$、$a_i/b_i$。
 - 禁止写成“即 $$...$$”“公式：$$...$$”或把句末标点放进公式分隔符。
 - 分式必须写成 \\frac{...}{...}，例如 \\log\\frac{1}{p(x)}，不要写成 1/p(x) 这类斜杠形式。
 </math_formula_protocol>`;
@@ -1501,6 +1503,9 @@ const renderInlineMarkdown = (text: string) => {
       if (/[=\\_^|∑∏≤≥≈≠]/.test(code) || /\b(?:log|ln|exp|Pr|H|I|D_[A-Za-z]+)\b/.test(code)) {
         return <MathExpression expression={code} key={`${index}-${part}`} />;
       }
+      if (/^[A-Za-z](?:_\{?[A-Za-z0-9]+\}?|\/[A-Za-z](?:_\{?[A-Za-z0-9]+\}?)?)?$/.test(code)) {
+        return <span key={`${index}-${part}`}>{code}</span>;
+      }
       return <code className="inline-code" key={`${index}-${part}`}>{code}</code>;
     }
     if (part.startsWith("**") && part.endsWith("**")) {
@@ -1627,6 +1632,16 @@ const parseAnswerBlocks = (text: string): AnswerBlock[] => {
 
   lines.forEach((line) => {
     const trimmed = line.trim();
+    if (/^```(?:math|latex|tex)?\s*$/i.test(trimmed)) {
+      if (inFormula) {
+        flushFormula();
+        inFormula = false;
+      } else {
+        flushParagraph();
+        inFormula = true;
+      }
+      return;
+    }
     if (trimmed === "$$" || trimmed === "\\[" || trimmed === "\\]") {
       if (inFormula) {
         flushFormula();
