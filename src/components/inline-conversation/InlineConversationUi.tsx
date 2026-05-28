@@ -1,19 +1,8 @@
 import { MessageSquarePlus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { renderAnswerText } from "../reader/answerRendering";
-import type { InlineConversation, InlineConversationMessage } from "../../domain/inlineConversations";
-
-export type InlineConversationDraft = {
-  id?: string;
-  anchor: string;
-  anchorOffset?: number;
-  anchorLength?: number;
-  anchorText?: string;
-  positionLabel: string;
-  question: string;
-  messages: InlineConversationMessage[];
-  saved?: boolean;
-} | null;
+import type { InlineConversation, InlineConversationDraft } from "../../domain/inlineConversations";
+export type { InlineConversationDraft } from "../../domain/inlineConversations";
 
 type InlineConversationDialogProps = {
   draft: NonNullable<InlineConversationDraft>;

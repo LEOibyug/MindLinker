@@ -12,6 +12,19 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Inline Conversation Rules Refactor
+
+- Moved inline-question draft, saved conversation, and summary-title construction rules into `domain/inlineConversations.ts`.
+- Moved `InlineConversationDraft` ownership from the UI component to the domain layer while keeping a type re-export for UI callers.
+- Replaced `App.tsx` inline object construction for selected-text/position questions and saved question threads with tested domain helpers.
+- Added domain tests for selected-text labels, empty-selection position labels, saved conversation payloads, and title fallbacks.
+- Reduced `App.tsx` from roughly 1,839 lines to roughly 1,829 lines.
+- Verification:
+  - `npm test -- --run src/domain/inlineConversations.test.ts`
+  - `npm test -- --run src/app/App.test.tsx -t "inline question|inline conversation|位置提问|right-click position|selected text location|summary panel|streams inline"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Persistent State Refactor
 
 - Extracted localStorage read/write and normalized persistent state handling from `App.tsx` into `services/persistentState.ts`.

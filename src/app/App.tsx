@@ -18,8 +18,17 @@ import type { ConversationKnowledgeGraph } from "../domain/types";
 import type { Explanation } from "../domain/explanations";
 import { bindExplanationsToAnswerText, bindExplanationsToMarkedTerms, getExplanationAnchorTerm, normalizeTermForMatch } from "../domain/explanations";
 import { InlineConversationDialog, renderInlineConversationMarker } from "../components/inline-conversation/InlineConversationUi";
-import type { InlineConversationDraft } from "../components/inline-conversation/InlineConversationUi";
-import type { InlineConversation, InlineConversationMarkerBinding, InlineConversationMessage } from "../domain/inlineConversations";
+import {
+  buildInlineConversationDraftFromAnchor,
+  buildSavedInlineConversation,
+  getInlineConversationTitle
+} from "../domain/inlineConversations";
+import type {
+  InlineConversation,
+  InlineConversationDraft,
+  InlineConversationMarkerBinding,
+  InlineConversationMessage
+} from "../domain/inlineConversations";
 import { ExplanationPanel } from "../components/panels/ExplanationPanel";
 import { buildDraftKnowledgeGraph, buildFallbackMarkedTerms, buildProjectKnowledgeGraph } from "../domain/knowledgeGraph";
 import {
@@ -1080,12 +1089,6 @@ export function App() {
     });
   };
 
-  const getInlineConversationTitle = (conversation: InlineConversation) =>
-    conversation.title?.trim() ||
-    conversation.question?.trim().slice(0, 18) ||
-    conversation.messages.find((message) => message.role === "user")?.content.trim().slice(0, 18) ||
-    conversation.anchor;
-
   const openInlineConversationFromSummary = (conversation: InlineConversation) => {
     openInlineConversation(conversation);
   };
@@ -1365,18 +1368,14 @@ export function App() {
   };
 
   const insertInlineConversation = () => {
-    const positionLabel = contextMenu?.selectedText
-      ? `选区：${contextMenu.selectedText.slice(0, 48)}`
-      : `位置：第 ${Math.max(1, Math.round((contextMenu?.anchorOffset ?? 0) + 1))} 个字符附近`;
-    setInlineConversationDraft({
-      anchor: contextMenu?.selectedText ? contextMenu.selectedText.slice(0, 48) : "当前位置",
-      anchorOffset: contextMenu?.anchorOffset,
-      anchorLength: contextMenu?.anchorLength,
-      anchorText: contextMenu?.anchorText,
-      positionLabel,
-      question: "",
-      messages: []
-    });
+    setInlineConversationDraft(
+      buildInlineConversationDraftFromAnchor({
+        selectedText: contextMenu?.selectedText ?? "",
+        anchorOffset: contextMenu?.anchorOffset,
+        anchorLength: contextMenu?.anchorLength,
+        anchorText: contextMenu?.anchorText
+      })
+    );
     setContextMenu(null);
   };
 
@@ -1457,21 +1456,12 @@ export function App() {
       setNotice("请输入要保存的位置对话内容");
       return;
     }
-    const conversation: InlineConversation = {
-      id: inlineConversationDraft.id ?? `inline-${Date.now()}`,
+    const conversation = buildSavedInlineConversation({
+      id: `inline-${Date.now()}`,
+      draft: inlineConversationDraft,
       projectId: activeProject.id,
-      conversationId: activeConversation.id,
-      anchor: inlineConversationDraft.anchor,
-      anchorOffset: inlineConversationDraft.anchorOffset,
-      anchorLength: inlineConversationDraft.anchorLength,
-      anchorText: inlineConversationDraft.anchorText,
-      positionLabel: inlineConversationDraft.positionLabel,
-      title: undefined,
-      question: inlineConversationDraft.messages.find((message) => message.role === "user")?.content ?? "",
-      answer: inlineConversationDraft.messages.find((message) => message.role === "assistant")?.content ?? "",
-      messages: inlineConversationDraft.messages,
-      saved: true
-    };
+      conversationId: activeConversation.id
+    });
     setInlineConversations((conversations) => [conversation, ...conversations.filter((item) => item.id !== conversation.id)]);
     setInlineConversationDraft(null);
     setInlineQuestionPending(false);
