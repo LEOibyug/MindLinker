@@ -12,6 +12,17 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Home Project Workflow Hook Refactor
+
+- Extracted home reference pre-parsing, reference removal, home-start project creation, existing-project opening, and new-project reset from `App.tsx` into `app/useHomeProjectActions.ts`.
+- Kept workspace reference importing in `App.tsx` for now because it has separate project-scoped patch/rewrite side effects.
+- Added hook tests for pre-parsing readiness, removed-reference resolution, and home-start project/draft creation.
+- Reduced `App.tsx` from roughly 1,131 lines to roughly 1,000 lines.
+- Verification:
+  - `npm test -- --run src/app/useHomeProjectActions.test.tsx`
+  - `npm test -- --run src/app/App.test.tsx -t "home|主页|参考准备|starts a usable project|自主学习导读|appends home references|removes an attached home reference|prominent parsing|InfoTheory|RAG"`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Inline Conversation Action Hook Refactor
 
 - Extracted position-question insertion, inline question streaming, saved thread persistence, and model-generated inline titles from `App.tsx` into `app/useInlineConversationActions.ts`.
