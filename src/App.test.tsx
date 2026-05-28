@@ -3337,6 +3337,69 @@ describe("MindLinker shell", () => {
     expect(details).not.toHaveTextContent("[[kl-divergence]]");
   });
 
+  it("drops graph edges that point to nodes hidden by the node limit", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "mindlinker.projects",
+      JSON.stringify([
+        {
+          id: "graph-limit",
+          title: "图谱节点裁剪",
+          documents: [],
+          conversations: [
+            {
+              id: "graph-limit-conversation",
+              title: "大量概念",
+              status: "idle",
+              explanationSeed: "",
+              referenceState: "refs:empty"
+            }
+          ]
+        }
+      ])
+    );
+    window.localStorage.setItem(
+      "mindlinker.conversationDrafts",
+      JSON.stringify({
+        "graph-limit-conversation": {
+          title: "大量概念",
+          prompt: "整理大量概念",
+          answerMode: "balanced",
+          referenceMode: "direct",
+          referenceTitles: [],
+          referenceContext: "",
+          openAIInputPreview: "",
+          answerMarkdown: "这里有大量概念，需要图谱裁剪。",
+          modelStatus: "generated",
+          generated: true,
+          explanationTerms: []
+        }
+      })
+    );
+    window.localStorage.setItem(
+      "mindlinker.conversationExplanations",
+      JSON.stringify({
+        "graph-limit-conversation": Array.from({ length: 32 }, (_, index) => ({
+          id: `concept-${index + 1}`,
+          term: `概念${index + 1}`,
+          body: `概念${index + 1}的解释。`,
+          source: "来源：当前参考",
+          nested: [],
+          referenceState: "refs:test"
+        }))
+      })
+    );
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开项目 图谱节点裁剪" }));
+
+    await user.click(screen.getByRole("button", { name: "知识图谱" }));
+
+    expect(screen.queryByRole("alert", { name: "知识图谱渲染失败" })).not.toBeInTheDocument();
+    const graph = screen.getByRole("region", { name: "知识图谱" });
+    expect(within(graph).getByRole("button", { name: "概念1" })).toBeInTheDocument();
+    expect(within(graph).queryByRole("button", { name: "概念32" })).not.toBeInTheDocument();
+  });
+
   it("shows a graph fallback instead of blanking the app when graph rendering throws", () => {
     const onError = vi.fn();
     vi.spyOn(console, "error").mockImplementation(() => {});

@@ -851,9 +851,14 @@ const buildProjectKnowledgeGraph = (
     addEdge(projectNodeId, sourceId, "参考");
   });
 
+  const visibleNodes = Array.from(nodes.values()).slice(0, 28);
+  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+
   return {
-    nodes: Array.from(nodes.values()).slice(0, 28),
-    edges: Array.from(edges.values()).filter((edge) => nodes.has(edge.from) && nodes.has(edge.to)).slice(0, 48)
+    nodes: visibleNodes,
+    edges: Array.from(edges.values())
+      .filter((edge) => visibleNodeIds.has(edge.from) && visibleNodeIds.has(edge.to))
+      .slice(0, 48)
   };
 };
 

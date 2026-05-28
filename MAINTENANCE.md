@@ -12,6 +12,21 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Knowledge Graph Edge Pruning
+
+- Investigated a real runtime log entry where the graph view failed with `node not found: concept-即时码`.
+- Root cause:
+  - project knowledge graphs were capped to 28 visible nodes;
+  - edge filtering still checked the pre-cap node map, so some visible graph data referenced nodes that had already been hidden.
+- Fixed graph construction to filter edges against the final visible node set before passing data to the force layout.
+- Regression coverage:
+  - graph data with more explanation concepts than the node limit no longer renders the graph failure fallback;
+  - hidden concepts are omitted together with their edges.
+- Verification:
+  - `npm test -- --run src/App.test.tsx -t "drops graph edges"`
+  - `npm test -- --run src/App.test.tsx`
+  - `npm run build`
+
 ### 2026-05-29 - Line-End Inline Question Markers
 
 - Fixed a rendering bug where one saved position question could appear multiple times on the same line when the line contained repeated explanation links.
