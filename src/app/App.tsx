@@ -76,6 +76,7 @@ import {
   parseMarkedAnswer,
   stripExplainableMarkers
 } from "../domain/markedTerms";
+import { usePersistentState, writeStoredValue } from "../services/persistentState";
 import { NewConversationPanel } from "../components/home/NewConversationPanel";
 import { HomePage } from "../components/home/HomePage";
 import { AppChrome } from "./AppChrome";
@@ -111,32 +112,6 @@ const emptyProject: LearningProject = {
   documents: [],
   conversations: [emptyConversation]
 };
-
-const readStoredValue = <T,>(key: string, fallback: T): T => {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-  try {
-    const stored = window.localStorage.getItem(key);
-    return stored ? (JSON.parse(stored) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-};
-
-const writeStoredValue = <T,>(key: string, value: T) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.warn(`[MindLinker] 无法写入本地存储 ${key}`, error);
-  }
-};
-
-const readStoredInlineConversations = () =>
-  normalizeStoredInlineConversations(readStoredValue<InlineConversation[]>("mindlinker.inlineConversations", []));
 
 const findNthOccurrenceOffset = (text: string, needle: string, occurrenceIndex: number) => {
   if (!needle) {
@@ -210,33 +185,39 @@ export function App() {
   const [explanationPanelMode, setExplanationPanelMode] = useState<"chain" | "summary">("chain");
   const [inlineConversationDraft, setInlineConversationDraft] = useState<InlineConversationDraft>(null);
   const [inlineQuestionPending, setInlineQuestionPending] = useState(false);
-  const [conversationExplanations, setConversationExplanationsState] = useState<Record<string, Explanation[]>>(() =>
-    readStoredValue("mindlinker.conversationExplanations", {})
+  const [conversationExplanations, setConversationExplanations] = usePersistentState<Record<string, Explanation[]>>(
+    "mindlinker.conversationExplanations",
+    {}
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [rewriteDraft, setRewriteDraft] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsReturnView, setSettingsReturnView] = useState<"home" | "workspace">("home");
   const [vectorStoreOpen, setVectorStoreOpen] = useState(false);
-  const [ragEnabled, setRagEnabledState] = useState(() => readStoredValue("mindlinker.ragEnabled", false));
-  const [embeddingEndpoint, setEmbeddingEndpointState] = useState(() =>
-    readStoredValue("mindlinker.embeddingEndpoint", "https://api.openai.com/v1/embeddings")
+  const [ragEnabled, setRagEnabled] = usePersistentState("mindlinker.ragEnabled", false);
+  const [embeddingEndpoint, setEmbeddingEndpoint] = usePersistentState(
+    "mindlinker.embeddingEndpoint",
+    "https://api.openai.com/v1/embeddings"
   );
-  const [embeddingApiKey, setEmbeddingApiKeyState] = useState(() => readStoredValue("mindlinker.embeddingApiKey", ""));
-  const [localVectorStores, setLocalVectorStoresState] = useState<VectorStore[]>(() => readStoredValue("mindlinker.vectorStores", []));
-  const [inlineConversations, setInlineConversationsState] = useState<InlineConversation[]>(() =>
-    readStoredInlineConversations()
+  const [embeddingApiKey, setEmbeddingApiKey] = usePersistentState("mindlinker.embeddingApiKey", "");
+  const [localVectorStores, setLocalVectorStores] = usePersistentState<VectorStore[]>("mindlinker.vectorStores", []);
+  const [inlineConversations, setInlineConversations] = usePersistentState<InlineConversation[]>(
+    "mindlinker.inlineConversations",
+    [],
+    {
+      normalize: (conversations) =>
+        normalizeStoredInlineConversations(conversations).filter((conversation) => !isLegacySavedInlineConversation(conversation))
+    }
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [manualExplanationPending, setManualExplanationPending] = useState<string | null>(null);
   const [debugMessages, setDebugMessages] = useState<string[]>([]);
   const [fullRewriteApplied, setFullRewriteApplied] = useState(false);
-  const [localProjects, setLocalProjectsState] = useState<LearningProject[]>(() => readStoredValue("mindlinker.projects", []));
-  const [customProviders, setCustomProvidersState] = useState<ProviderConfig[]>(() =>
-    readStoredValue("mindlinker.providers", providerConfigs)
-  );
-  const [activeProviderIdState, setActiveProviderIdState] = useState(() =>
-    readStoredValue("mindlinker.activeProviderId", providerConfigs[0]?.id ?? "")
+  const [localProjects, setLocalProjects] = usePersistentState<LearningProject[]>("mindlinker.projects", []);
+  const [customProviders, setCustomProviders] = usePersistentState<ProviderConfig[]>("mindlinker.providers", providerConfigs);
+  const [activeProviderIdState, setActiveProviderId] = usePersistentState(
+    "mindlinker.activeProviderId",
+    providerConfigs[0]?.id ?? ""
   );
   const [activeProjectId, setActiveProjectId] = useState(localProjects[0]?.id ?? "");
   const [activeConversationId, setActiveConversationId] = useState(localProjects[0]?.conversations[0]?.id ?? "");
@@ -256,14 +237,15 @@ export function App() {
   const [includedDocumentIds, setIncludedDocumentIds] = useState<Record<string, string[]>>(
     Object.fromEntries(localProjects.map((project) => [project.id, project.documents]))
   );
-  const [parsedReferences, setParsedReferences] = useState<ParsedReferenceDocument[]>(() =>
-    readStoredValue("mindlinker.parsedReferences", [])
+  const [parsedReferences, setParsedProjectReferences] = usePersistentState<ParsedReferenceDocument[]>("mindlinker.parsedReferences", []);
+  const [conversationDrafts, setStoredConversationDrafts, setVisibleConversationDrafts] = usePersistentState<Record<string, ConversationDraft>>(
+    "mindlinker.conversationDrafts",
+    {},
+    { normalize: normalizeStoredConversationDrafts }
   );
-  const [conversationDrafts, setConversationDrafts] = useState<Record<string, ConversationDraft>>(() =>
-    normalizeStoredConversationDrafts(readStoredValue("mindlinker.conversationDrafts", {}))
-  );
-  const [referenceParseCache, setReferenceParseCacheState] = useState<Record<string, ReferenceParseCacheEntry>>(() =>
-    readStoredValue("mindlinker.referenceParseCache", {})
+  const [referenceParseCache, setReferenceParseCache] = usePersistentState<Record<string, ReferenceParseCacheEntry>>(
+    "mindlinker.referenceParseCache",
+    {}
   );
   const [referencePlanId, setReferencePlanId] = useState<string | null>(null);
   const [appliedPatch, setAppliedPatch] = useState(false);
@@ -366,16 +348,6 @@ export function App() {
 
   const hasRestorableAnnotations = (conversationId: string, status: LearningProject["conversations"][number]["status"]) =>
     (conversationExplanations[conversationId] ?? []).length > 0 || status === "ready";
-
-  const setConversationExplanations = (
-    updater: Record<string, Explanation[]> | ((explanationsByConversation: Record<string, Explanation[]>) => Record<string, Explanation[]>)
-  ) => {
-    setConversationExplanationsState((explanationsByConversation) => {
-      const nextExplanations = typeof updater === "function" ? updater(explanationsByConversation) : updater;
-      writeStoredValue("mindlinker.conversationExplanations", nextExplanations);
-      return nextExplanations;
-    });
-  };
 
   const isConversationVisible = (conversationId: string, projectId: string) =>
     activeProjectIdRef.current === projectId && activeConversationIdRef.current === conversationId;
@@ -720,84 +692,6 @@ export function App() {
     }
   };
 
-  const setLocalProjects = (updater: LearningProject[] | ((projects: LearningProject[]) => LearningProject[])) => {
-    setLocalProjectsState((projects) => {
-      const nextProjects = typeof updater === "function" ? updater(projects) : updater;
-      writeStoredValue("mindlinker.projects", nextProjects);
-      return nextProjects;
-    });
-  };
-
-  const setCustomProviders = (updater: ProviderConfig[] | ((providers: ProviderConfig[]) => ProviderConfig[])) => {
-    setCustomProvidersState((providers) => {
-      const nextProviders = typeof updater === "function" ? updater(providers) : updater;
-      writeStoredValue("mindlinker.providers", nextProviders);
-      return nextProviders;
-    });
-  };
-
-  const setActiveProviderId = (providerId: string) => {
-    setActiveProviderIdState(providerId);
-    writeStoredValue("mindlinker.activeProviderId", providerId);
-  };
-
-  const setRagEnabled = (enabled: boolean) => {
-    setRagEnabledState(enabled);
-    writeStoredValue("mindlinker.ragEnabled", enabled);
-  };
-
-  const setEmbeddingEndpoint = (endpoint: string) => {
-    setEmbeddingEndpointState(endpoint);
-    writeStoredValue("mindlinker.embeddingEndpoint", endpoint);
-  };
-
-  const setEmbeddingApiKey = (apiKey: string) => {
-    setEmbeddingApiKeyState(apiKey);
-    writeStoredValue("mindlinker.embeddingApiKey", apiKey);
-  };
-
-  const setLocalVectorStores = (updater: VectorStore[] | ((stores: VectorStore[]) => VectorStore[])) => {
-    setLocalVectorStoresState((stores) => {
-      const nextStores = typeof updater === "function" ? updater(stores) : updater;
-      writeStoredValue("mindlinker.vectorStores", nextStores);
-      return nextStores;
-    });
-  };
-
-  const setInlineConversations = (
-    updater: InlineConversation[] | ((conversations: InlineConversation[]) => InlineConversation[])
-  ) => {
-    setInlineConversationsState((conversations) => {
-      const nextConversations = (typeof updater === "function" ? updater(conversations) : updater).filter(
-        (conversation) => !isLegacySavedInlineConversation(conversation)
-      );
-      writeStoredValue("mindlinker.inlineConversations", nextConversations);
-      return nextConversations;
-    });
-  };
-
-  const setParsedProjectReferences = (
-    updater: ParsedReferenceDocument[] | ((documents: ParsedReferenceDocument[]) => ParsedReferenceDocument[])
-  ) => {
-    setParsedReferences((documents) => {
-      const nextDocuments = typeof updater === "function" ? updater(documents) : updater;
-      writeStoredValue("mindlinker.parsedReferences", nextDocuments);
-      return nextDocuments;
-    });
-  };
-
-  const setReferenceParseCache = (
-    updater:
-      | Record<string, ReferenceParseCacheEntry>
-      | ((cache: Record<string, ReferenceParseCacheEntry>) => Record<string, ReferenceParseCacheEntry>)
-  ) => {
-    setReferenceParseCacheState((cache) => {
-      const nextCache = typeof updater === "function" ? updater(cache) : updater;
-      writeStoredValue("mindlinker.referenceParseCache", nextCache);
-      return nextCache;
-    });
-  };
-
   const parseReferenceFileWithCache = async (file: File, projectId: string, index: number) => {
     const fingerprint = getFileFingerprint(file);
     const cachedDocument = referenceParseCache[fingerprint]?.document;
@@ -826,22 +720,6 @@ export function App() {
     setReferenceParseCache((cache) => {
       return pruneReferenceCache(cache, nextDocuments);
     });
-  };
-
-  const setStoredConversationDrafts = (
-    updater: Record<string, ConversationDraft> | ((drafts: Record<string, ConversationDraft>) => Record<string, ConversationDraft>)
-  ) => {
-    setConversationDrafts((drafts) => {
-      const nextDrafts = normalizeStoredConversationDrafts(typeof updater === "function" ? updater(drafts) : updater);
-      writeStoredValue("mindlinker.conversationDrafts", nextDrafts);
-      return nextDrafts;
-    });
-  };
-
-  const setVisibleConversationDrafts = (
-    updater: Record<string, ConversationDraft> | ((drafts: Record<string, ConversationDraft>) => Record<string, ConversationDraft>)
-  ) => {
-    setConversationDrafts((drafts) => (typeof updater === "function" ? updater(drafts) : updater));
   };
 
   const logParsedDocuments = (documents: ParsedReferenceDocument[]) => {

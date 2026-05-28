@@ -12,6 +12,20 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Persistent State Refactor
+
+- Extracted localStorage read/write and normalized persistent state handling from `App.tsx` into `services/persistentState.ts`.
+- Replaced repeated app-level persistence setters for projects, providers, RAG settings, vector stores, inline conversations, parsed references, reference cache, conversation drafts, and explanations with `usePersistentState`.
+- Preserved transient in-memory draft updates for streaming model output so partial chunks do not force localStorage writes on every token.
+- Kept the one-time conversation-draft normalization write in `App.tsx` for stored legacy data migration.
+- Added service-level tests for fallback reads, write failures, functional updates, normalization, and transient updates.
+- Reduced `App.tsx` from roughly 1,962 lines to roughly 1,839 lines.
+- Verification:
+  - `npm test -- --run src/services/persistentState.test.tsx`
+  - `npm test -- --run src/app/App.test.tsx -t "localStorage|persistence|persist|stored|restore|restores|conversationDrafts|inlineConversations|referenceParseCache|stream|streaming|draft persistence|legacy"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Project Lifecycle Logic Refactor
 
 - Extracted project/conversation lifecycle rules from `App.tsx` into `domain/projectLifecycle.ts`.
