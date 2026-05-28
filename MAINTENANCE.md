@@ -104,3 +104,23 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "marker|markers|explanation text|explanation links|malformed|graph details|streaming visible|marked terms"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - Structured Prompt Protocol
+
+- Reworked model-facing prompts into a shared `MindLinker Prompt Protocol v1` structure.
+- Main answer, explanation chain, title generation, inline position questions, and rewrite drafts now use clear sections:
+  - `【任务】`
+  - `【输入】`
+  - `【输出格式】` or `【JSON 输出协议】`
+  - `【禁止事项】`
+- Kept the previously verified marker and formula constraints intact while making them easier for models to follow.
+- Regression coverage:
+  - main-answer prompt includes structured task/input/output/marker/formula/prohibition sections;
+  - explanation-chain prompt includes structured JSON and nested-marker rules;
+  - title, inline question, and rewrite prompts use the same structured protocol;
+  - existing marker, formula, title, rewrite, and inline-question behavior remains stable.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "strict formula delimiter|strict explainable marker grammar|strict nested marker grammar|project title in parallel|inserted question|rewrite draft"`
+  - `npm test -- src/App.test.tsx -t "prompt|marker|formula|math|title|位置提问|rewrite|重写|inline question|strict"`
+  - `npm test`
+  - `npm run build`

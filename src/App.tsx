@@ -410,6 +410,25 @@ const answerModePrompts: Record<AnswerMode, { label: string; instruction: string
   }
 };
 
+const promptProtocolHeader = "MindLinker Prompt Protocol v1";
+
+const explainableMarkerProtocol = `【可解释标记协议】
+- 只允许使用 [[ml:stable-english-id]]术语[[/ml]]。
+- 结束标签必须永远是 [[/ml]]，严禁写成 [[/ml:stable-english-id]] 或任何带 id 的结束标签。
+- id 只使用小写英文、数字和连字符，每个可解释点使用语义化且尽量唯一的 id，不要复用 stable-english-id 这个示例 id。
+- 正确示例：[[ml:cross-entropy]]交叉熵[[/ml]] 会衡量两个分布的差异。
+- 错误示例：[[ml:cross-entropy]]交叉熵[[/ml:cross-entropy]]。
+- 错误示例：[[convex-function]]。裸 [[id]] 是非法格式；如果要标记凸函数，必须写成 [[ml:convex-function]]凸函数[[/ml]]。
+- 同一位置一个标记，不要跨句标记，不要标记整段句子。`;
+
+const mathFormulaProtocol = `【数学公式协议】
+- 数学公式使用 LaTeX。
+- 行内公式使用 $...$ 或 \\(...\\)，不要写成 \\$...\\$。
+- 块级公式必须使用三行标准格式：第一行只写 $$，第二行只写公式本体，第三行只写 $$。
+- $$ 所在行只能包含 $$，不能包含“即”“公式为”等任何正文。
+- 禁止写成“即 $$...$$”“公式：$$...$$”或把句末标点放进公式分隔符。
+- 分式必须写成 \\frac{...}{...}，例如 \\log\\frac{1}{p(x)}，不要写成 1/p(x) 这类斜杠形式。`;
+
 const buildFallbackAnswer = (prompt: string, referenceTitles: string[]) => {
   const referenceLine =
     referenceTitles.length > 0
@@ -418,19 +437,27 @@ const buildFallbackAnswer = (prompt: string, referenceTitles: string[]) => {
   return `${referenceLine}\n\n你的问题是：${prompt}\n\n请在设置中配置可用的主模型 API 后重新生成，应用会把参考内容作为 OpenAI 兼容的文本与图片输入发送给模型。`;
 };
 
-const buildRewritePrompt = (selectedText: string) => `请重写下面的回答选区，使它更适合课程学习/论文阅读场景。
+const buildRewritePrompt = (selectedText: string) => `${promptProtocolHeader}
 
-【当前选区】
+【任务】重写回答选区
+请重写下面的回答选区，使它更适合课程学习/论文阅读场景。
+
+【输入】
+当前选区：
 ${selectedText}
 
-【参考片段】
+参考片段：
 ${rewriteReferences.map((reference, index) => `${index + 1}. ${reference.title}\n${reference.quote}`).join("\n\n")}
 
-【重写要求】
-1. 优先依据参考片段，不要引入与参考矛盾的新说法。
-2. 保留仍然有效的术语标记和解释锚点；如果重写导致原标记不再适用，说明需要重新生成解释。
-3. 用更清晰的学习笔记语言表达，但不要改写成过度口语化的说明。
-4. 输出只包含重写后的文本。`;
+【输出格式】
+- 只输出重写后的文本。
+- 用清晰的学习笔记语言表达。
+- 保留仍然有效的术语标记和解释锚点；如果重写导致原标记不再适用，说明需要重新生成解释。
+
+【禁止事项】
+- 不要引入与参考片段矛盾的新说法。
+- 不要输出解释过程、JSON、标题字段或调试信息。
+- 不要改写成过度口语化的说明。`;
 
 const buildConversationDraft = (
   prompt: string,
@@ -940,8 +967,33 @@ const requestChatCompletion = async (
   const referenceParts = buildOpenAIInputParts(documents);
   const instruction = {
     type: "input_text" as const,
-    text:
-      `你是面向课程学习、理论知识和论文阅读的学习助手。请严格依据用户上传的参考材料优先回答；如果参考不足，明确说明。输出只包含给用户看的主回复正文，不要输出内部字段名、JSON、调试信息或 answer-xxx 标签。不要以“好的”、“当然”、“我是...助手”、“我将基于...”、“下面我将...”这类寒暄、自我介绍或任务复述开头；不要自我介绍，不要说明你会做什么，直接进入实质内容或合适的标题。\n\n解释标记格式必须严格遵守：\n- 只允许使用 [[ml:stable-english-id]]术语[[/ml]]。\n- 结束标签必须永远是 [[/ml]]，严禁写成 [[/ml:stable-english-id]] 或任何带 id 的结束标签。\n- id 只使用小写英文、数字和连字符，每个可解释点使用语义化且尽量唯一的 id，不要复用 stable-english-id 这个示例 id。\n- 正确示例：[[ml:cross-entropy]]交叉熵[[/ml]] 会衡量两个分布的差异。\n- 错误示例：[[ml:cross-entropy]]交叉熵[[/ml:cross-entropy]]。\n- 错误示例：[[convex-function]]。裸 [[id]] 是非法格式；如果要标记凸函数，必须写成 [[ml:convex-function]]凸函数[[/ml]]。\n- 同一位置一个标记，不要跨句标记，不要标记整段句子。\n\n请主动为关键词、专有名词、理论概念、定理、公式名、符号含义、方法名和容易产生误解的短语添加解释标记。不要漏掉正文中的核心概念，宁可多标几个可解释点。\n\n数学公式格式必须严格遵守：\n- 数学公式使用 LaTeX。\n- 行内公式使用 $...$ 或 \\(...\\)，不要写成 \\$...\\$。\n- 块级公式必须使用三行标准格式：第一行只写 $$，第二行只写公式本体，第三行只写 $$。\n- $$ 所在行只能包含 $$，不能包含“即”“公式为”等任何正文。\n- 禁止写成“即 $$...$$”“公式：$$...$$”或把句末标点放进公式分隔符。\n- 分式必须写成 \\frac{...}{...}，例如 \\log\\frac{1}{p(x)}，不要写成 1/p(x) 这类斜杠形式。\n\n${answerModePrompts[answerMode].instruction}`
+    text: `${promptProtocolHeader}
+
+【任务】主回复生成
+你是面向课程学习、理论知识和论文阅读的学习助手。请严格依据用户上传的参考材料优先回答；如果参考不足，明确说明。
+
+【输入】
+- 用户问题在后续消息中给出。
+- 参考材料会以文本页、页面图片或多模态附件形式随消息提供。
+- 当前详细程度：${answerModePrompts[answerMode].label}。
+
+【输出格式】
+- 输出只包含给用户看的主回复正文。
+- 直接进入实质内容或合适的标题。
+- 请主动为关键词、专有名词、理论概念、定理、公式名、符号含义、方法名和容易产生误解的短语添加解释标记。
+- 不要漏掉正文中的核心概念，宁可多标几个可解释点。
+
+${explainableMarkerProtocol}
+
+${mathFormulaProtocol}
+
+【详细程度协议】
+${answerModePrompts[answerMode].instruction}
+
+【禁止事项】
+- 不要输出内部字段名、JSON、调试信息或 answer-xxx 标签。
+- 不要以“好的”、“当然”、“我是...助手”、“我将基于...”、“下面我将...”这类寒暄、自我介绍或任务复述开头。
+- 不要自我介绍，不要说明你会做什么。`
   };
   const userPrompt = {
     type: "input_text" as const,
@@ -1113,24 +1165,34 @@ const requestExplanationChain = async (
   const nestedMarkerInstruction = options.allowNestedMarkers
     ? "解释正文 body 中如果确实出现还值得继续解释的术语，请使用 [[ml:stable-english-id]]术语[[/ml]] 标记；结束标签必须严格为 [[/ml]]，严禁写成 [[/ml:id]]；裸 [[id]] 是非法格式，例如 [[convex-function]] 是错误写法，如果要标记凸函数，必须写成 [[ml:convex-function]]凸函数[[/ml]]；id 使用语义化英文小写短横线，不要复用 stable-english-id 这个示例 id；不要超过必要数量。"
     : "解释正文 body 中不要再生成任何 [[ml:id]]...[[/ml]] 待解释标记。";
-  const prompt = `为了提升缓存命中，下面先复述上一阶段的对话前缀，再追加解释任务系统提示词。
+  const prompt = `${promptProtocolHeader}
 
+【任务】解释链生成
+为课程学习、理论知识和论文阅读场景生成名词解释。只解释“待解释词表”中列出的项目，一个 id 对应一个解释，不要合并同名词。优先使用参考材料，其次使用当前上下文。
+
+【输入】
 上一阶段可见正文：
 ${answer}
 
 参考材料：
 ${referenceContext || "无"}
 
-解释任务系统提示词：
-你正在为课程学习/理论知识/论文阅读场景生成名词解释。请只解释“待解释词表”中列出的项目，一个 id 对应一个解释，不要合并同名词。优先使用参考材料，其次使用当前上下文。${nestedMarkerInstruction}
+待解释词表：
+${termList}
 
-JSON 格式：
+【JSON 输出协议】
 [
   {"id":"与待解释词表一致的 id","term":"术语","body":"面向学习者的简洁解释","source":"尽量指出参考来源或当前回答","nested":["可继续解释的词"]}
 ]
 
-待解释词表：
-${termList}`;
+【可解释标记协议】
+${nestedMarkerInstruction}
+
+【禁止事项】
+- 不要输出 JSON 之外的说明文字。
+- 不要解释待解释词表之外的项目。
+- 不要合并同名但不同 id 的项目。
+- 不要编造参考来源。`;
   appendRuntimeLog("model", "解释链请求开始", {
     ...runtimeContext,
     provider: provider.name,
@@ -1225,11 +1287,12 @@ const requestProjectTitle = async (
       ? `${baseUrl.endsWith("/responses") ? baseUrl : `${baseUrl}/responses`}`
       : `${baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`}`;
   const referenceContext = buildReferenceContext(documents).slice(0, 5000);
-  const promptText = `项目标题生成任务
+  const promptText = `${promptProtocolHeader}
 
+【任务】项目标题生成任务
 请根据用户问题、参考材料标题、参考材料摘要和已有项目/对话上下文，归纳一个 4 到 12 个字的学习标题。
-只输出标题，不要引号、解释或标点。
 
+【输入】
 用户问题：
 ${prompt}
 
@@ -1241,7 +1304,17 @@ ${prompt}
 ${referenceTitles.length > 0 ? referenceTitles.join("、") : "无"}
 
 参考材料摘要：
-${referenceContext || "无"}`;
+${referenceContext || "无"}
+
+【输出格式】
+- 只输出标题。
+- 标题长度为 4 到 12 个字。
+- 不要引号、解释或标点。
+
+【禁止事项】
+- 不要依据主回复正文或模型回答命名。
+- 不要输出 Markdown、JSON 或多行内容。
+- 不要使用“新项目”“新对话”等占位词。`;
   appendRuntimeLog("model", "标题模型请求开始", {
     provider: provider.name,
     model: model.name,
@@ -1290,8 +1363,12 @@ const requestInlineQuestionAnswer = async (
     provider.apiFormat === "openai-responses"
       ? `${baseUrl.endsWith("/responses") ? baseUrl : `${baseUrl}/responses`}`
       : `${baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`}`;
-  const prompt = `你正在回答用户在主回复某个位置插入的局部提问。请依据参考材料、主回复全文、提问位置标记和已有小窗问答，直接回答当前问题。不要输出 JSON，不要改写主回复全文。
+  const prompt = `${promptProtocolHeader}
 
+【任务】位置提问回答
+回答用户在主回复某个位置插入的局部提问。请依据参考材料、主回复全文、提问位置标记和已有小窗问答，直接回答当前问题。
+
+【输入】
 提问位置标记：
 ${positionLabel}
 
@@ -1305,7 +1382,17 @@ ${buildReferenceContext(documents).slice(0, 18_000) || "无"}
 ${messages.length > 0 ? messages.map((message) => `${message.role === "user" ? "用户" : "助手"}：${message.content}`).join("\n") : "无"}
 
 当前问题：
-${question}`;
+${question}
+
+【输出格式】
+- 只输出当前问题的回答正文。
+- 回答应当聚焦提问位置与当前问题。
+- 可以引用主回复或参考材料中的概念，但不要改写主回复全文。
+
+【禁止事项】
+- 不要输出 JSON、调试信息或内部字段名。
+- 不要复述完整主回复。
+- 不要编造参考材料中不存在的来源。`;
   appendRuntimeLog("model", "位置提问请求开始", {
     provider: provider.name,
     model: model.name,

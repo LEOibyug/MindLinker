@@ -283,6 +283,12 @@ describe("MindLinker shell", () => {
     await screen.findByText("这是包含公式格式约束的回答。");
     const requestBody = String(fetchMock.mock.calls[0]?.[1]?.body ?? "");
     const requestText = JSON.parse(requestBody).messages[0].content[0].text;
+    expect(requestText).toContain("MindLinker Prompt Protocol");
+    expect(requestText).toContain("【任务】");
+    expect(requestText).toContain("【输入】");
+    expect(requestText).toContain("【输出格式】");
+    expect(requestText).toContain("【数学公式协议】");
+    expect(requestText).toContain("【禁止事项】");
     expect(requestText).toContain("块级公式必须使用三行标准格式");
     expect(requestText).toContain("$$ 所在行只能包含 $$");
     expect(requestText).toContain("禁止写成“即 $$...$$”");
@@ -310,6 +316,7 @@ describe("MindLinker shell", () => {
     await screen.findByText("这是包含解释标记格式约束的回答。");
     const requestBody = String(fetchMock.mock.calls[0]?.[1]?.body ?? "");
     const requestText = JSON.parse(requestBody).messages[0].content[0].text;
+    expect(requestText).toContain("【可解释标记协议】");
     expect(requestText).toContain("裸 [[id]] 是非法格式");
     expect(requestText).toContain("[[convex-function]]");
     expect(requestText).toContain("[[ml:convex-function]]凸函数[[/ml]]");
@@ -749,7 +756,8 @@ describe("MindLinker shell", () => {
     });
     expect(explanationCall).toBeTruthy();
     expect(String(explanationCall?.[1]?.body ?? "")).toContain("term-cross-entropy");
-    expect(String(explanationCall?.[1]?.body ?? "")).toContain("为了提升缓存命中");
+    expect(String(explanationCall?.[1]?.body ?? "")).toContain("MindLinker Prompt Protocol");
+    expect(String(explanationCall?.[1]?.body ?? "")).toContain("上一阶段可见正文");
   });
 
   it("sends strict nested marker grammar to the explanation model", async () => {
@@ -795,6 +803,11 @@ describe("MindLinker shell", () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("待解释词表"))).toBe(true));
     const explanationCall = fetchMock.mock.calls.find(([, init]) => String(init?.body ?? "").includes("待解释词表"));
     const requestText = JSON.parse(String(explanationCall?.[1]?.body ?? "")).messages[0].content;
+    expect(requestText).toContain("MindLinker Prompt Protocol");
+    expect(requestText).toContain("【任务】");
+    expect(requestText).toContain("【输入】");
+    expect(requestText).toContain("【JSON 输出协议】");
+    expect(requestText).toContain("【禁止事项】");
     expect(requestText).toContain("裸 [[id]] 是非法格式");
     expect(requestText).toContain("[[convex-function]]");
     expect(requestText).toContain("[[ml:convex-function]]凸函数[[/ml]]");
@@ -841,7 +854,10 @@ describe("MindLinker shell", () => {
     expect(screen.queryByText(/\[\[\/ml:/)).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 entropy熵" })).toHaveClass("revealed"));
 
-    const explanationCall = fetchMock.mock.calls.find(([, init]) => String(init?.body ?? "").includes("待解释词表"));
+    const explanationCall = fetchMock.mock.calls.find(([, init]) => {
+      const body = String(init?.body ?? "");
+      return body.includes("待解释词表") && body.includes("核心概念包括");
+    });
     expect(String(explanationCall?.[1]?.body ?? "")).toContain("entropy");
   });
 
@@ -1018,6 +1034,11 @@ describe("MindLinker shell", () => {
     expect(answerController).not.toBeNull();
     expect(titleRequestBody).toContain("请根据这份课程 PPT 给我讲课");
     expect(titleRequestBody).toContain("lecture-aep.md");
+    expect(titleRequestBody).toContain("MindLinker Prompt Protocol");
+    expect(titleRequestBody).toContain("【任务】项目标题生成任务");
+    expect(titleRequestBody).toContain("【输入】");
+    expect(titleRequestBody).toContain("【输出格式】");
+    expect(titleRequestBody).toContain("【禁止事项】");
     expect(titleRequestBody).toContain("参考材料摘要");
     expect(titleRequestBody).toContain("<PARSED TEXT: lecture-aep.md>");
     expect(titleRequestBody).not.toContain("本章解释 AEP 和典型集");
@@ -1681,6 +1702,11 @@ describe("MindLinker shell", () => {
 
     expect(await screen.findByText("这是模型基于当前位置、主回复和参考生成的回答。")).toBeInTheDocument();
     const requestBody = String(fetchMock.mock.calls[0]?.[1]?.body ?? "");
+    expect(requestBody).toContain("MindLinker Prompt Protocol");
+    expect(requestBody).toContain("【任务】位置提问回答");
+    expect(requestBody).toContain("【输入】");
+    expect(requestBody).toContain("【输出格式】");
+    expect(requestBody).toContain("【禁止事项】");
     expect(requestBody).toContain("提问位置标记");
     expect(requestBody).toContain("主回复");
     expect(requestBody).toContain("参考材料");
@@ -1855,6 +1881,11 @@ describe("MindLinker shell", () => {
     const draft = screen.getByRole("complementary", { name: "重写草稿" });
     expect(within(draft).getByText("重写草稿")).toBeInTheDocument();
     expect(within(draft).getByText("选区：提高模型给正确类别分配的概率")).toBeInTheDocument();
+    expect(within(draft).getByDisplayValue(/MindLinker Prompt Protocol/)).toBeInTheDocument();
+    expect(within(draft).getByDisplayValue(/【任务】重写回答选区/)).toBeInTheDocument();
+    expect(within(draft).getByDisplayValue(/【输入】/)).toBeInTheDocument();
+    expect(within(draft).getByDisplayValue(/【输出格式】/)).toBeInTheDocument();
+    expect(within(draft).getByDisplayValue(/【禁止事项】/)).toBeInTheDocument();
     expect(within(draft).getByDisplayValue(/参考片段/)).toBeInTheDocument();
     expect(within(draft).getByDisplayValue(/Deep Learning Notes\.pdf · p\.8/)).toBeInTheDocument();
     expect(within(draft).getByDisplayValue(/保留仍然有效的术语标记和解释锚点/)).toBeInTheDocument();
