@@ -12,6 +12,23 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Reference Cache Logic Refactor
+
+- Extracted local reference-cache helpers from `App.tsx` into `referenceCache.ts`.
+- Kept asynchronous parsing and UI status orchestration in `App.tsx` while moving pure logic for:
+  - uploaded-file fingerprinting;
+  - cloning cached parsed references into project-local document ids;
+  - creating cache entries without preserving project-local ids;
+  - pruning parsed references only when no remaining project still uses them;
+  - pruning cache entries against the remaining parsed reference set.
+- Added module-level tests for cache cloning, cache entry creation, and cross-project safe pruning.
+- Reduced `App.tsx` from roughly 2,053 lines to roughly 2,040 lines.
+- Verification:
+  - `npm test -- --run src/referenceCache.test.ts`
+  - `npm test -- --run src/App.test.tsx -t "reference|参考|parsed reference|home references|delete reference|导入|删除参考|cache"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Provider Settings Logic Refactor
 
 - Extracted provider configuration rules from `App.tsx` into `providerSettings.ts`.

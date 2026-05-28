@@ -45,6 +45,13 @@ import {
   updateProviderModelConfig
 } from "./providerSettings";
 import type { ProviderField } from "./providerSettings";
+import {
+  cloneParsedReferenceForProject,
+  createReferenceCacheEntry,
+  getFileFingerprint,
+  pruneReferenceCache,
+  pruneReferenceDocuments
+} from "./referenceCache";
 import { appendRuntimeLog } from "./runtimeLog";
 import { SettingsPage } from "./SettingsPage";
 import { normalizePlainTextForAnchor } from "./textAnchors";
@@ -117,13 +124,6 @@ const writeStoredValue = <T,>(key: string, value: T) => {
 
 const readStoredInlineConversations = () =>
   normalizeStoredInlineConversations(readStoredValue<InlineConversation[]>("mindlinker.inlineConversations", []));
-
-const getFileFingerprint = (file: File) => `${file.name}:${file.size}:${file.type || "application/octet-stream"}`;
-
-const cloneParsedReferenceForProject = (document: ParsedReferenceDocument, projectId: string, index: number): ParsedReferenceDocument => ({
-  ...document,
-  id: `${projectId}-reference-${index}-${Date.now()}`
-});
 
 const findNthOccurrenceOffset = (text: string, needle: string, occurrenceIndex: number) => {
   if (!needle) {
@@ -797,12 +797,7 @@ export function App() {
     const parsedDocument = await parseReferenceFile(file, projectId, index, ragEnabled);
     setReferenceParseCache((cache) => ({
       ...cache,
-      [fingerprint]: {
-        document: {
-          ...parsedDocument,
-          id: `cache-${fingerprint}`
-        }
-      }
+      [fingerprint]: createReferenceCacheEntry(parsedDocument, fingerprint)
     }));
     return parsedDocument;
   };
@@ -811,23 +806,15 @@ export function App() {
     if (removedDocumentIds.length === 0) {
       return;
     }
-    const remainingProjectDocumentIds = new Set(
-      localProjects.flatMap((project) => (project.id === activeProject.id ? project.documents.filter((id) => !removedDocumentIds.includes(id)) : project.documents))
-    );
-    setParsedProjectReferences((documents) =>
-      documents.filter((document) => !removedDocumentIds.includes(document.id) || remainingProjectDocumentIds.has(document.id))
-    );
+    const nextDocuments = pruneReferenceDocuments({
+      activeProjectId: activeProject.id,
+      documents: parsedReferences,
+      projects: localProjects,
+      removedDocumentIds
+    });
+    setParsedProjectReferences(nextDocuments);
     setReferenceParseCache((cache) => {
-      const remainingDocuments = parsedReferences.filter(
-        (document) => !removedDocumentIds.includes(document.id) || remainingProjectDocumentIds.has(document.id)
-      );
-      return Object.fromEntries(
-        Object.entries(cache).filter(([, entry]) =>
-          remainingDocuments.some(
-            (document) => document.title === entry.document.title && document.version === entry.document.version && document.kind === entry.document.kind
-          )
-        )
-      );
+      return pruneReferenceCache(cache, nextDocuments);
     });
   };
 
