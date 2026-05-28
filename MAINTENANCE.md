@@ -12,6 +12,18 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Home Reference Append Imports
+
+- Fixed the home reference file picker so importing files multiple times appends to the pending reference list instead of replacing earlier files.
+- Kept drag-and-drop behavior aligned with the picker by using the same append path.
+- Cleared the file input after each selection so selecting the same filename again can still fire a change event.
+- Regression coverage:
+  - first and second picker imports both remain visible;
+  - starting a project after multiple imports carries all pending references into the workspace;
+  - existing home reference remove and home start flows remain stable.
+- Verification:
+  - `npm test -- --run src/App.test.tsx -t "appends home references|home references|attached home reference|starts a usable project from the home prompt"`
+
 ### 2026-05-29 - Workspace New Project Starter
 
 - Changed the workspace "新建项目" action to open the same home-style project starter used on first launch instead of creating an empty placeholder project.

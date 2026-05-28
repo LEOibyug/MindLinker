@@ -224,6 +224,26 @@ describe("MindLinker shell", () => {
     expect(screen.getByText(/notes.md/).closest(".home-file-pill")).toHaveTextContent("已解析");
   });
 
+  it("appends home references when users import files multiple times", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.upload(screen.getByLabelText("添加参考文件"), new File(["first"], "first.md", { type: "text/markdown" }));
+    await waitFor(() => expect(screen.getByRole("status", { name: "参考准备状态" })).toHaveTextContent("参考已准备好 · 1 份"));
+
+    await user.upload(screen.getByLabelText("添加参考文件"), new File(["second"], "second.md", { type: "text/markdown" }));
+
+    await waitFor(() => expect(screen.getByRole("status", { name: "参考准备状态" })).toHaveTextContent("参考已准备好 · 2 份"));
+    expect(screen.getByText("first.md")).toBeInTheDocument();
+    expect(screen.getByText("second.md")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("学习问题"), "合并参考学习");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    expect(screen.getByText("first.md")).toBeInTheDocument();
+    expect(screen.getByText("second.md")).toBeInTheDocument();
+  });
+
   it("removes an attached home reference before starting a project", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();

@@ -3384,7 +3384,10 @@ export function App() {
                   aria-label="添加参考文件"
                   multiple
                   type="file"
-                  onChange={(event) => void parseHomeReferences(Array.from(event.target.files ?? []))}
+                  onChange={(event) => {
+                    void parseHomeReferences([...homeFiles, ...Array.from(event.target.files ?? [])]);
+                    event.currentTarget.value = "";
+                  }}
                 />
               </label>
               <form
