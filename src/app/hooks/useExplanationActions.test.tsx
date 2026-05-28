@@ -1,9 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ConversationDraft } from "../domain/conversationDrafts";
-import type { Explanation } from "../domain/explanations";
-import type { ProviderConfig } from "../domain/types";
-import type { ReaderContextMenuState } from "../components/reader/readerInteraction";
+import type { ConversationDraft } from "../../domain/conversationDrafts";
+import type { Explanation } from "../../domain/explanations";
+import type { ProviderConfig } from "../../domain/types";
+import type { ReaderContextMenuState } from "../../components/reader/readerInteraction";
 import { useExplanationActions } from "./useExplanationActions";
 
 const provider: ProviderConfig = {

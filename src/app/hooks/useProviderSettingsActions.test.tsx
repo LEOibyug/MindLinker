@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ProviderConfig } from "../domain/types";
+import type { ProviderConfig } from "../../domain/types";
 import { useProviderSettingsActions } from "./useProviderSettingsActions";
 
 const providers: ProviderConfig[] = [

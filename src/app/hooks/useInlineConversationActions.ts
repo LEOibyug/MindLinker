@@ -1,21 +1,21 @@
-import type { ConversationDraft } from "../domain/conversationDrafts";
+import type { ConversationDraft } from "../../domain/conversationDrafts";
 import {
   buildInlineConversationDraftFromAnchor,
   buildSavedInlineConversation
-} from "../domain/inlineConversations";
+} from "../../domain/inlineConversations";
 import type {
   InlineConversation,
   InlineConversationDraft,
   InlineConversationMessage
-} from "../domain/inlineConversations";
-import type { ProviderConfig } from "../domain/types";
-import type { ReaderContextMenuState } from "../components/reader/readerInteraction";
+} from "../../domain/inlineConversations";
+import type { ProviderConfig } from "../../domain/types";
+import type { ReaderContextMenuState } from "../../components/reader/readerInteraction";
 import {
   findChatModelConfig,
   requestInlineConversationTitle,
   requestInlineQuestionAnswer
-} from "../services/modelClient";
-import type { ParsedReferenceDocument } from "../services/pdfReferences";
+} from "../../services/modelClient";
+import type { ParsedReferenceDocument } from "../../services/pdfReferences";
 
 type StateSetter<T> = (updater: T | ((value: T) => T)) => void;
 

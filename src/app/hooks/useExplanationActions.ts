@@ -1,10 +1,10 @@
-import type { ConversationDraft } from "../domain/conversationDrafts";
-import type { Explanation } from "../domain/explanations";
-import type { ReferenceChangePlan, ProviderConfig } from "../domain/types";
-import { findChatModelConfig, requestExplanationChain } from "../services/modelClient";
-import type { ParsedReferenceDocument } from "../services/pdfReferences";
-import { normalizeMarkedTermId, stripExplainableMarkers } from "../domain/markedTerms";
-import type { ReaderContextMenuState } from "../components/reader/readerInteraction";
+import type { ConversationDraft } from "../../domain/conversationDrafts";
+import type { Explanation } from "../../domain/explanations";
+import type { ReferenceChangePlan, ProviderConfig } from "../../domain/types";
+import { findChatModelConfig, requestExplanationChain } from "../../services/modelClient";
+import type { ParsedReferenceDocument } from "../../services/pdfReferences";
+import { normalizeMarkedTermId, stripExplainableMarkers } from "../../domain/markedTerms";
+import type { ReaderContextMenuState } from "../../components/reader/readerInteraction";
 
 type StateSetter<T> = (updater: T | ((value: T) => T)) => void;
 

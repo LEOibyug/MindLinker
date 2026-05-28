@@ -3,30 +3,30 @@ import {
   buildConversationDraft,
   completeConversationDraft,
   sanitizeProjectTitle
-} from "../domain/conversationDrafts";
-import type { ConversationDraft } from "../domain/conversationDrafts";
-import { bindExplanationsToMarkedTerms } from "../domain/explanations";
-import type { Explanation } from "../domain/explanations";
-import { buildFallbackMarkedTerms } from "../domain/knowledgeGraph";
+} from "../../domain/conversationDrafts";
+import type { ConversationDraft } from "../../domain/conversationDrafts";
+import { bindExplanationsToMarkedTerms } from "../../domain/explanations";
+import type { Explanation } from "../../domain/explanations";
+import { buildFallbackMarkedTerms } from "../../domain/knowledgeGraph";
 import {
   findChatModelConfig,
   requestChatCompletion,
   requestExplainableTerms,
   requestExplanationChain,
   requestProjectTitle
-} from "../services/modelClient";
-import type { ParsedReferenceDocument } from "../services/pdfReferences";
+} from "../../services/modelClient";
+import type { ParsedReferenceDocument } from "../../services/pdfReferences";
 import {
   buildNeedsConfigurationDraft,
   buildStreamingDraft,
   chooseExplanationTerms,
   missingMainModelMessage,
   shouldLogStreamingChunk
-} from "../services/conversationGeneration";
-import type { StreamingLogState } from "../services/conversationGeneration";
-import { appendRuntimeLog } from "../services/runtimeLog";
-import { chunkMarkedTerms, getVisiblePartialMarkedAnswer, parseMarkedAnswer, stripExplainableMarkers } from "../domain/markedTerms";
-import type { LearningProject, ProviderConfig } from "../domain/types";
+} from "../../services/conversationGeneration";
+import type { StreamingLogState } from "../../services/conversationGeneration";
+import { appendRuntimeLog } from "../../services/runtimeLog";
+import { chunkMarkedTerms, getVisiblePartialMarkedAnswer, parseMarkedAnswer, stripExplainableMarkers } from "../../domain/markedTerms";
+import type { LearningProject, ProviderConfig } from "../../domain/types";
 
 type StateSetter<T> = (updater: T | ((value: T) => T)) => void;
 type GenerationPhase = "idle" | "content" | "annotations" | "ready";

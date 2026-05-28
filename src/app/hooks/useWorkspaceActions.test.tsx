@@ -1,10 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ConversationDraft, ReferenceParseCacheEntry } from "../domain/conversationDrafts";
-import type { Explanation } from "../domain/explanations";
-import type { InlineConversation } from "../domain/inlineConversations";
-import type { LearningProject, VectorStore } from "../domain/types";
-import type { ParsedReferenceDocument } from "../services/pdfReferences";
+import type { ConversationDraft, ReferenceParseCacheEntry } from "../../domain/conversationDrafts";
+import type { Explanation } from "../../domain/explanations";
+import type { InlineConversation } from "../../domain/inlineConversations";
+import type { LearningProject, VectorStore } from "../../domain/types";
+import type { ParsedReferenceDocument } from "../../services/pdfReferences";
 import { useWorkspaceActions } from "./useWorkspaceActions";
 
 const referenceA: ParsedReferenceDocument = {

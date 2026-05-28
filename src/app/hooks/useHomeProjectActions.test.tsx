@@ -1,8 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ConversationDraft, HomeReferenceItem, ReferenceParseCacheEntry } from "../domain/conversationDrafts";
-import type { LearningProject } from "../domain/types";
-import type { ParsedReferenceDocument } from "../services/pdfReferences";
+import type { ConversationDraft, HomeReferenceItem, ReferenceParseCacheEntry } from "../../domain/conversationDrafts";
+import type { LearningProject } from "../../domain/types";
+import type { ParsedReferenceDocument } from "../../services/pdfReferences";
 import { useHomeProjectActions } from "./useHomeProjectActions";
 
 const parsedDocument: ParsedReferenceDocument = {

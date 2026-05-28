@@ -3,26 +3,26 @@ import {
   type AnswerMode,
   type ConversationDraft,
   type ReferenceParseCacheEntry
-} from "../domain/conversationDrafts";
-import type { Explanation } from "../domain/explanations";
-import type { InlineConversation } from "../domain/inlineConversations";
+} from "../../domain/conversationDrafts";
+import type { Explanation } from "../../domain/explanations";
+import type { InlineConversation } from "../../domain/inlineConversations";
 import {
   buildInitialProjectConversation,
   buildProjectNavigationTarget,
   deleteConversationFromProject,
   getConversationGenerationPhase,
   removeProjectDocument
-} from "../domain/projectLifecycle";
-import type { LearningProject, VectorStore } from "../domain/types";
+} from "../../domain/projectLifecycle";
+import type { LearningProject, VectorStore } from "../../domain/types";
 import {
   cloneParsedReferenceForProject,
   createReferenceCacheEntry,
   getFileFingerprint,
   pruneReferenceCache,
   pruneReferenceDocuments
-} from "../services/referenceCache";
-import { parseReferenceFile } from "../services/pdfReferences";
-import type { ParsedReferenceDocument } from "../services/pdfReferences";
+} from "../../services/referenceCache";
+import { parseReferenceFile } from "../../services/pdfReferences";
+import type { ParsedReferenceDocument } from "../../services/pdfReferences";
 
 type StateSetter<T> = (updater: T | ((value: T) => T)) => void;
 type GenerationPhase = "idle" | "content" | "annotations" | "ready";

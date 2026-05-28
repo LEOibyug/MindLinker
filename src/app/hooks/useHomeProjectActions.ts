@@ -5,26 +5,26 @@ import {
   type ConversationDraft,
   type HomeReferenceItem,
   type ReferenceParseCacheEntry
-} from "../domain/conversationDrafts";
-import type { Explanation } from "../domain/explanations";
-import type { LearningProject } from "../domain/types";
+} from "../../domain/conversationDrafts";
+import type { Explanation } from "../../domain/explanations";
+import type { LearningProject } from "../../domain/types";
 import {
   buildProjectFromHomeStart,
   buildProjectNavigationTarget
-} from "../domain/projectLifecycle";
+} from "../../domain/projectLifecycle";
 import {
   buildHomeReferenceItems,
   buildHomeReferenceStatusText,
   removeHomeReferenceItem,
   resolveHomeReferenceDocuments
-} from "../services/homeReferences";
+} from "../../services/homeReferences";
 import {
   cloneParsedReferenceForProject,
   createReferenceCacheEntry,
   getFileFingerprint
-} from "../services/referenceCache";
-import { parseReferenceFile } from "../services/pdfReferences";
-import type { ParsedReferenceDocument } from "../services/pdfReferences";
+} from "../../services/referenceCache";
+import { parseReferenceFile } from "../../services/pdfReferences";
+import type { ParsedReferenceDocument } from "../../services/pdfReferences";
 
 type StateSetter<T> = (updater: T | ((value: T) => T)) => void;
 type AppView = "home" | "workspace";

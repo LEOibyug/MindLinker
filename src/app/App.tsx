@@ -38,14 +38,14 @@ import { buildReaderContextMenuState } from "../components/reader/readerInteract
 import type { ReaderContextMenuState } from "../components/reader/readerInteraction";
 import { NewConversationPanel } from "../components/home/NewConversationPanel";
 import { HomePage } from "../components/home/HomePage";
-import { AppChrome } from "./AppChrome";
-import { WorkspaceView } from "./WorkspaceView";
-import { useConversationGeneration } from "./useConversationGeneration";
-import { useProviderSettingsActions } from "./useProviderSettingsActions";
-import { useExplanationActions } from "./useExplanationActions";
-import { useInlineConversationActions } from "./useInlineConversationActions";
-import { useHomeProjectActions } from "./useHomeProjectActions";
-import { useWorkspaceActions } from "./useWorkspaceActions";
+import { AppChrome } from "./chrome/AppChrome";
+import { WorkspaceView } from "./workspace/WorkspaceView";
+import { useConversationGeneration } from "./hooks/useConversationGeneration";
+import { useProviderSettingsActions } from "./hooks/useProviderSettingsActions";
+import { useExplanationActions } from "./hooks/useExplanationActions";
+import { useInlineConversationActions } from "./hooks/useInlineConversationActions";
+import { useHomeProjectActions } from "./hooks/useHomeProjectActions";
+import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 
 const emptyKnowledgeGraph: ConversationKnowledgeGraph = {
   nodes: [],

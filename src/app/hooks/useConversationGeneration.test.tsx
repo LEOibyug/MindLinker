@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ConversationDraft } from "../domain/conversationDrafts";
-import type { LearningProject, ProviderConfig } from "../domain/types";
+import type { ConversationDraft } from "../../domain/conversationDrafts";
+import type { LearningProject, ProviderConfig } from "../../domain/types";
 import { useConversationGeneration } from "./useConversationGeneration";
 
 const draft: ConversationDraft = {

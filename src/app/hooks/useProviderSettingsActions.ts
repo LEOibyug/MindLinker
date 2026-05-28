@@ -1,4 +1,4 @@
-import type { ModelConfig, ProviderConfig } from "../domain/types";
+import type { ModelConfig, ProviderConfig } from "../../domain/types";
 import {
   addProviderConfig,
   addProviderModelConfig,
@@ -7,10 +7,10 @@ import {
   deleteProviderModelConfig,
   updateProviderConfig,
   updateProviderModelConfig
-} from "../services/providerSettings";
-import type { ProviderField } from "../services/providerSettings";
-import { testProviderConnectionRequest, testProviderModelRequest } from "../services/providerDiagnostics";
-import { appendRuntimeLog } from "../services/runtimeLog";
+} from "../../services/providerSettings";
+import type { ProviderField } from "../../services/providerSettings";
+import { testProviderConnectionRequest, testProviderModelRequest } from "../../services/providerDiagnostics";
+import { appendRuntimeLog } from "../../services/runtimeLog";
 
 type StateSetter<T> = (updater: T | ((value: T) => T)) => void;
 

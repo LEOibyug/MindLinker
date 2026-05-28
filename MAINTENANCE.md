@@ -12,6 +12,17 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - App Directory Structure Refactor
+
+- Moved app-level action hooks into `app/hooks/` so project, workspace, explanation, inline-question, provider, and generation orchestration live behind a single folder boundary.
+- Moved the workspace composition view into `app/workspace/` and the shell chrome into `app/chrome/`.
+- Kept `App.tsx` as the top-level state/composition owner while reducing root-level app folder noise for future contributors.
+- Verification:
+  - `npm test -- --run src/app/hooks/useConversationGeneration.test.tsx src/app/hooks/useExplanationActions.test.tsx src/app/hooks/useHomeProjectActions.test.tsx src/app/hooks/useInlineConversationActions.test.tsx src/app/hooks/useProviderSettingsActions.test.tsx src/app/hooks/useWorkspaceActions.test.tsx`
+  - `npm test -- --run src/app/chrome/AppChrome.test.tsx src/app/workspace/WorkspaceView.test.tsx`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Workspace Action Hook Refactor
 
 - Extracted workspace project/conversation switching, project-scoped reference import/delete, new conversation creation, reference patch/full-rewrite state changes, and vector-store actions from `App.tsx` into `app/useWorkspaceActions.ts`.
