@@ -12,6 +12,18 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Answer Parsing Boundary Refactor
+
+- Extracted Markdown block parsing, table parsing, standalone formula detection, and LaTeX normalization from `components/reader/answerRendering.tsx` into `components/reader/answerParsing.ts`.
+- Kept React-specific term links, inline question markers, KaTeX rendering, and block-to-element rendering in `answerRendering.tsx`.
+- Added pure parsing tests for table/formula block detection and wrapper/fraction normalization.
+- Reduced `answerRendering.tsx` from roughly 628 lines to roughly 413 lines.
+- Verification:
+  - `npm test -- --run src/components/reader/answerParsing.test.ts src/components/reader/answerRendering.test.tsx`
+  - `npm test -- --run src/components/reader/ReaderContent.test.tsx src/components/panels/ExplanationPanel.test.tsx`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Model Client Boundary Refactor
 
 - Split `services/modelClient.ts` into a thin orchestration facade plus `services/modelClient/protocol.ts` for prompt/protocol builders and `services/modelClient/transport.ts` for provider endpoint/header and response parsing utilities.
