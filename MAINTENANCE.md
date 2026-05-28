@@ -12,6 +12,18 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Settings and Explanation Action Hook Refactor
+
+- Extracted provider/model settings mutations and diagnostics from `App.tsx` into `app/useProviderSettingsActions.ts`.
+- Extracted manual selected-text explanation and explanation-rewrite orchestration from `App.tsx` into `app/useExplanationActions.ts`.
+- Kept `App.tsx` responsible for state ownership, visible UI composition, active project/conversation selection, and event wiring.
+- Added hook tests for provider creation/update/delete, provider/model diagnostics, manual explanation storage, and explanation rewrite cleanup.
+- Reduced `App.tsx` from roughly 1,409 lines to roughly 1,231 lines.
+- Verification:
+  - `npm test -- --run src/app/useProviderSettingsActions.test.tsx src/app/useExplanationActions.test.tsx`
+  - `npm test -- --run src/app/App.test.tsx -t "provider|供应商|model|模型|explanation|解释|manual|选区|rewrite|重写|Settings|设置"`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Conversation Generation Hook Refactor
 
 - Extracted main-answer and explanation-chain generation orchestration from `App.tsx` into `app/useConversationGeneration.ts`.

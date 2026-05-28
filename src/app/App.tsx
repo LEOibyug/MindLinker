@@ -10,7 +10,7 @@ import {
   providerConfigs,
   referenceChangePlans,
 } from "../domain/types";
-import type { LearningProject, ModelConfig, ProviderConfig, VectorStore } from "../domain/types";
+import type { LearningProject, ProviderConfig, VectorStore } from "../domain/types";
 import type { ConversationKnowledgeGraph } from "../domain/types";
 import type { Explanation } from "../domain/explanations";
 import { bindExplanationsToAnswerText, getExplanationAnchorTerm, normalizeTermForMatch } from "../domain/explanations";
@@ -43,27 +43,15 @@ import {
   getConversationGenerationPhase,
   removeProjectDocument
 } from "../domain/projectLifecycle";
-import { testProviderConnectionRequest, testProviderModelRequest } from "../services/providerDiagnostics";
 import {
   buildRewritePrompt,
   findChatModelConfig,
-  requestExplanationChain,
   requestInlineConversationTitle,
   requestInlineQuestionAnswer,
 } from "../services/modelClient";
 import { parseReferenceFile } from "../services/pdfReferences";
 import type { ParsedReferenceDocument } from "../services/pdfReferences";
-import {
-  addProviderConfig,
-  addProviderModelConfig,
-  createProviderConfig,
-  deleteProviderConfig,
-  deleteProviderModelConfig,
-  getActiveProviderId,
-  updateProviderConfig,
-  updateProviderModelConfig
-} from "../services/providerSettings";
-import type { ProviderField } from "../services/providerSettings";
+import { getActiveProviderId } from "../services/providerSettings";
 import {
   cloneParsedReferenceForProject,
   createReferenceCacheEntry,
@@ -74,10 +62,6 @@ import {
 import { appendRuntimeLog } from "../services/runtimeLog";
 import { SettingsPage } from "../components/panels/SettingsPage";
 import { VectorStoreDialog } from "../components/panels/VectorStoreDialog";
-import {
-  normalizeMarkedTermId,
-  stripExplainableMarkers
-} from "../domain/markedTerms";
 import { usePersistentState, writeStoredValue } from "../services/persistentState";
 import { buildReaderContextMenuState } from "../components/reader/readerInteraction";
 import type { ReaderContextMenuState } from "../components/reader/readerInteraction";
@@ -86,6 +70,8 @@ import { HomePage } from "../components/home/HomePage";
 import { AppChrome } from "./AppChrome";
 import { WorkspaceView } from "./WorkspaceView";
 import { useConversationGeneration } from "./useConversationGeneration";
+import { useProviderSettingsActions } from "./useProviderSettingsActions";
+import { useExplanationActions } from "./useExplanationActions";
 
 const emptyKnowledgeGraph: ConversationKnowledgeGraph = {
   nodes: [],
@@ -344,6 +330,45 @@ export function App() {
     logDebugMessage
   });
 
+  const {
+    addProvider,
+    addProviderModel,
+    deleteProvider,
+    deleteProviderModel,
+    testProviderConnection,
+    testProviderModel,
+    updateProvider,
+    updateProviderModel
+  } = useProviderSettingsActions({
+    activeProviderId,
+    customProviders,
+    setActiveProviderId,
+    setCustomProviders,
+    setNotice,
+    logDebugMessage
+  });
+
+  const { createManualExplanation, rewriteExplanation } = useExplanationActions({
+    activeConversationId: activeConversation.id,
+    activeProjectId: activeProject.id,
+    activeProviderId,
+    activeConversationReferenceState: activeConversation.referenceState,
+    activeDraft,
+    activeConversationExplanations,
+    activeReferencePlan,
+    availableExplanations,
+    contextMenu,
+    customProviders,
+    projectDocuments,
+    setAvailableExplanations,
+    setContextMenu,
+    setConversationExplanations,
+    setExplanationStack,
+    setManualExplanationPending,
+    setNotice,
+    logDebugMessage
+  });
+
   const parseReferenceFileWithCache = async (file: File, projectId: string, index: number) => {
     const fingerprint = getFileFingerprint(file);
     const cachedDocument = referenceParseCache[fingerprint]?.document;
@@ -590,93 +615,6 @@ export function App() {
     setNotice("已删除当前学习项目");
   };
 
-  const addProvider = () => {
-    const providerId = `provider-${Date.now()}`;
-    setCustomProviders((providers) => addProviderConfig(providers, createProviderConfig(providerId)));
-    setNotice("已添加自定义供应商");
-  };
-
-  const addProviderModel = (providerId: string) => {
-    const modelId = `${providerId}-model-${Date.now()}`;
-    setCustomProviders((providers) => addProviderModelConfig(providers, providerId, modelId));
-    setNotice("已添加模型");
-  };
-
-  const updateProvider = (providerId: string, field: ProviderField, value: string) => {
-    setCustomProviders((providers) => updateProviderConfig(providers, providerId, field, value));
-  };
-
-  const updateProviderModel = (providerId: string, modelId: string, value: string) => {
-    setCustomProviders((providers) => updateProviderModelConfig(providers, providerId, modelId, value));
-  };
-
-  const deleteProvider = (providerId: string) => {
-    const deletion = deleteProviderConfig(customProviders, providerId, activeProviderId);
-    if (!deletion.deleted) {
-      setNotice("至少需要保留一个供应商配置");
-      return;
-    }
-    if (deletion.activeProviderId !== activeProviderId) {
-      setActiveProviderId(deletion.activeProviderId);
-    }
-    setCustomProviders(deletion.providers);
-    setNotice("已删除供应商配置");
-  };
-
-  const deleteProviderModel = (providerId: string, modelId: string) => {
-    setCustomProviders((providers) => deleteProviderModelConfig(providers, providerId, modelId));
-    setNotice("已删除模型");
-  };
-
-  const testProviderConnection = async (provider: ProviderConfig) => {
-    if (!provider.baseUrl.trim()) {
-      setNotice(`请先填写${provider.name}的 Base URL`);
-      return;
-    }
-    setNotice(`正在测试 ${provider.name}`);
-    appendRuntimeLog("settings", "供应商连接测试开始", {
-      provider: provider.name,
-      baseUrl: provider.baseUrl,
-      apiFormat: provider.apiFormat
-    });
-    try {
-      const result = await testProviderConnectionRequest(provider);
-      appendRuntimeLog("settings", "供应商连接测试通过", { provider: provider.name, status: result.status });
-      setNotice(`${provider.name} 连接检查已通过`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      appendRuntimeLog("settings", "供应商连接测试失败", { provider: provider.name, message }, "error");
-      setNotice(`${provider.name} 连接失败：${message}`);
-    }
-  };
-
-  const testProviderModel = async (provider: ProviderConfig, model: ModelConfig) => {
-    if (!provider.baseUrl.trim()) {
-      setNotice(`请先填写${provider.name}的 Base URL`);
-      return;
-    }
-    if (!model.name.trim()) {
-      setNotice("请先填写模型名称");
-      return;
-    }
-    setNotice(`正在测试 ${model.name}`);
-    appendRuntimeLog("settings", "模型连接测试开始", {
-      provider: provider.name,
-      model: model.name,
-      baseUrl: provider.baseUrl,
-      apiFormat: provider.apiFormat
-    });
-    try {
-      const result = await testProviderModelRequest(provider, model);
-      appendRuntimeLog("settings", "模型连接测试通过", { provider: provider.name, model: model.name, status: result.status });
-      setNotice(`${model.name} 模型检查已通过`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      appendRuntimeLog("settings", "模型连接测试失败", { provider: provider.name, model: model.name, message }, "error");
-      setNotice(`${model.name} 模型检查失败：${message}`);
-    }
-  };
-
   const openExplanation = (term: string) => {
     const normalizedTerm = normalizeTermForMatch(term);
     const explanation = activeConversationExplanations.find(
@@ -720,64 +658,6 @@ export function App() {
         explanations: availableExplanations
       })
     );
-  };
-
-  const createManualExplanation = async () => {
-    if (!contextMenu?.selectedText) {
-      return;
-    }
-    const selectedText = contextMenu.selectedText;
-    const sourceExplanationTerm = contextMenu.sourceExplanationTerm;
-    const sourceExplanationBody = contextMenu.sourceExplanationBody;
-    setContextMenu(null);
-    const chatConfig = findChatModelConfig(customProviders, activeProviderId);
-    if (!chatConfig) {
-      setNotice("请在设置中配置可用的主模型 API");
-      return;
-    }
-
-    setManualExplanationPending(selectedText);
-    setNotice("正在生成选区解释");
-    const explanationId = normalizeMarkedTermId("manual-selected", selectedText, 1);
-    const explanationContext = sourceExplanationBody
-      ? `${activeDraft?.answerMarkdown ?? ""}\n\n当前解释：${sourceExplanationBody}`
-      : activeDraft?.answerMarkdown ?? selectedText;
-    try {
-      const explanations = await requestExplanationChain(
-        explanationContext,
-        [{ id: explanationId, term: selectedText, ordinal: 1 }],
-        projectDocuments,
-        chatConfig.provider,
-        chatConfig.model,
-        activeConversation.referenceState,
-        { allowNestedMarkers: false, reason: "manual" },
-        {
-          projectId: activeProject.id,
-          conversationId: activeConversation.id,
-          selectedText
-        }
-      );
-      const explanation = explanations[0];
-      if (!explanation) {
-        setNotice("模型没有返回可用解释，请稍后重试");
-        return;
-      }
-      setConversationExplanations((items) => ({
-        ...items,
-        [activeConversation.id]: [...(items[activeConversation.id] ?? []).filter((item) => item.term !== explanation.term), explanation]
-      }));
-      setAvailableExplanations((items) => [...items.filter((item) => item.term !== explanation.term), explanation]);
-      if (!sourceExplanationTerm) {
-        setExplanationStack((stack) => [...stack.filter((item) => item.term !== explanation.term), explanation]);
-      }
-      setNotice("已生成选区解释");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setNotice(message);
-      logDebugMessage(message);
-    } finally {
-      setManualExplanationPending(null);
-    }
   };
 
   const switchProject = (projectId: string) => {
@@ -1112,64 +992,6 @@ export function App() {
     setAvailableExplanations([]);
     setExplanationStack([]);
     setNotice("已完成全文重写，并重新绑定解释链");
-  };
-
-  const rewriteExplanation = async (term: string) => {
-    const chatConfig = findChatModelConfig(customProviders, activeProviderId);
-    if (!chatConfig) {
-      setNotice("请在设置中配置可用的主模型 API");
-      return;
-    }
-    const currentExplanation = activeConversationExplanations.find((explanation) => explanation.term === term);
-    if (!currentExplanation) {
-      setNotice("该概念还没有可重写的模型解释");
-      return;
-    }
-    setNotice(`正在重写「${term}」的解释`);
-    try {
-      const rewritten = await requestExplanationChain(
-        `${activeDraft?.answerMarkdown ?? ""}\n\n当前解释：${currentExplanation.body}`,
-        [{ id: currentExplanation.id ?? normalizeMarkedTermId("rewrite", term, 1), term, ordinal: 1 }],
-        projectDocuments,
-        chatConfig.provider,
-        chatConfig.model,
-        activeReferencePlan?.impacts.find((impact) => impact.term === term)?.nextReferenceState ?? activeConversation.referenceState,
-        { allowNestedMarkers: false, reason: "manual" },
-        {
-          projectId: activeProject.id,
-          conversationId: activeConversation.id,
-          term,
-          operation: "rewrite-explanation"
-        }
-      );
-      const nextExplanation = rewritten[0];
-      if (!nextExplanation) {
-        setNotice("模型没有返回可用解释，请稍后重试");
-        return;
-      }
-      const cleanedExplanation = {
-        ...nextExplanation,
-        body: stripExplainableMarkers(nextExplanation.body),
-        nested: nextExplanation.nested
-      };
-      setConversationExplanations((items) => ({
-        ...items,
-        [activeConversation.id]: [
-          ...(items[activeConversation.id] ?? activeConversationExplanations).filter((explanation) => explanation.term !== term),
-          cleanedExplanation
-        ]
-      }));
-      setAvailableExplanations((items) => [...items.filter((explanation) => explanation.term !== term), cleanedExplanation]);
-      setExplanationStack((stack) => [
-        ...stack.filter((explanation) => explanation.term !== term),
-        cleanedExplanation
-      ]);
-      setNotice(`已重写「${term}」的解释`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setNotice(message);
-      logDebugMessage(message);
-    }
   };
 
   const clearVectorStore = (storeId: string) => {
