@@ -2218,34 +2218,19 @@ export function App() {
   };
 
   const createProject = () => {
-    const projectNumber = localProjects.length + 1;
-    const projectId = `project-${Date.now()}`;
-    const conversationId = `conversation-${Date.now()}`;
-    const project: LearningProject = {
-      id: projectId,
-      title: `新学习项目 ${projectNumber}`,
-      documents: [],
-      conversations: [
-        {
-          id: conversationId,
-          title: "新的学习对话",
-          status: "idle",
-          explanationSeed: "",
-          referenceState: "refs:empty"
-        }
-      ]
-    };
-    setLocalProjects((projects) => [project, ...projects]);
-    setProjectTitles((titles) => ({ ...titles, [project.id]: project.title }));
-    setActiveProjectId(project.id);
-    setActiveConversationId(project.conversations[0].id);
-    setIncludedDocumentIds((documentsByProject) => ({ ...documentsByProject, [project.id]: [] }));
+    setHomePrompt("");
+    setHomeFiles([]);
+    setHomeReferenceItems([]);
+    removedHomeReferenceKeysRef.current = new Set();
+    homeReferencePromiseRef.current = Promise.resolve([]);
+    setHomeStartWaiting(false);
+    setHomeAnswerMode("balanced");
     setAvailableExplanations([]);
     setExplanationStack([]);
     setConfirmingProjectDeleteId(null);
     setNewConversationOpen(false);
-    setAppView("workspace");
-    setNotice("已新建学习项目");
+    setAppView("home");
+    setNotice("从主页开始一个新项目");
   };
 
   const deleteProject = (projectId: string) => {

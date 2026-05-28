@@ -12,6 +12,18 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Workspace New Project Starter
+
+- Changed the workspace "新建项目" action to open the same home-style project starter used on first launch instead of creating an empty placeholder project.
+- The starter resets any previous home prompt, pending files, parsed-reference state, and answer-style choice so a new project begins from a clean composer.
+- Project creation, reference import, title fallback, and initial conversation generation continue to use the existing home-start flow.
+- Regression coverage:
+  - clicking "新建项目" from the workspace shows the `Let's link your mind` starter with reference import;
+  - starting from that composer creates a normal deletable project with imported references;
+  - ordinary notices still auto-dismiss.
+- Verification:
+  - `npm test -- --run src/App.test.tsx -t "home-style project starter|auto-dismisses ordinary status"`
+
 ### 2026-05-29 - Answer Rendering Boundary Refactor
 
 - Extracted answer rendering out of `App.tsx` into focused modules:

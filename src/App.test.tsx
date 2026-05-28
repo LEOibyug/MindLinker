@@ -1657,7 +1657,7 @@ describe("MindLinker shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "打开项目 分布距离与损失函数" }));
 
     fireEvent.click(screen.getByRole("button", { name: "新建项目" }));
-    expect(screen.getByRole("status")).toHaveTextContent("已新建学习项目");
+    expect(screen.getByRole("status")).toHaveTextContent("从主页开始一个新项目");
 
     await act(async () => {
       vi.advanceTimersByTime(4200);
@@ -2745,26 +2745,37 @@ describe("MindLinker shell", () => {
     expect(screen.getByRole("button", { name: "对话 KL 散度与交叉熵" })).toHaveClass("active");
   });
 
-  it("creates and deletes learning projects", async () => {
+  it("opens the home-style project starter from the workspace and then creates a deletable project", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();
     await enterWorkspace(user);
 
     await user.click(screen.getByRole("button", { name: "新建项目" }));
 
-    expect(screen.getByRole("button", { name: "项目 新学习项目 3" })).toHaveClass("active");
-    expect(screen.getByRole("button", { name: "对话 新的学习对话" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已新建学习项目");
+    expect(screen.getByRole("main", { name: "主页" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Let's link your mind" })).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "学习输入栏" })).toBeInTheDocument();
+    expect(screen.getByText("拖入/导入参考资料")).toBeInTheDocument();
+    expect(screen.getByLabelText("添加参考文件")).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "项目目录" })).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("学习问题"), "新项目课程");
+    await user.upload(screen.getByLabelText("添加参考文件"), new File(["新增参考"], "new-project.md", { type: "text/markdown" }));
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    expect(screen.getByRole("button", { name: "项目 新项目课程" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "对话 新项目课程" })).toBeInTheDocument();
+    expect(screen.getByText("new-project.md")).toBeInTheDocument();
 
     expect(screen.queryByRole("button", { name: "删除项目" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "删除项目 新学习项目 3" }));
+    await user.click(screen.getByRole("button", { name: "删除项目 新项目课程" }));
 
-    expect(screen.getByRole("button", { name: "确认删除项目 新学习项目 3" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "项目 新学习项目 3" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "确认删除项目 新项目课程" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "项目 新项目课程" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "确认删除项目 新学习项目 3" }));
+    await user.click(screen.getByRole("button", { name: "确认删除项目 新项目课程" }));
 
-    expect(screen.queryByRole("button", { name: "项目 新学习项目 3" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "项目 新项目课程" })).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("已删除当前学习项目");
   });
 
