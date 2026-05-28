@@ -1,12 +1,6 @@
 import {
   Brain,
-  Highlighter,
-  GitBranch,
-  MessageSquarePlus,
   Network,
-  Sparkles,
-  PencilLine,
-  Search,
   Settings,
   X
 } from "lucide-react";
@@ -64,6 +58,7 @@ import {
 import { NewConversationPanel } from "./NewConversationPanel";
 import { ProjectSidebar } from "./ProjectSidebar";
 import { HomePage } from "./HomePage";
+import { ReaderContextMenu, ReaderToolbar } from "./ReaderControls";
 
 type ContextMenuState = {
   x: number;
@@ -2058,41 +2053,13 @@ export function App() {
         />
 
         <main className="reader-panel" aria-label="阅读区">
-          <div className="reader-toolbar">
-            <div className="search-box">
-              <Search aria-hidden="true" size={16} />
-              <span>在当前回复、解释和来源中搜索</span>
-            </div>
-            <div className="view-actions">
-              {viewMode === "reader" && activeDraft?.modelStatus === "generated" && activeDraft.answerMarkdown.trim() ? (
-                <button
-                  className="icon-text-button explain-action"
-                  type="button"
-                  disabled={activeConversationRunning}
-                  onClick={() => void generateExplanationsForConversation()}
-                >
-                  <Sparkles aria-hidden="true" size={16} />
-                  自动解释关键词
-                </button>
-              ) : null}
-              <button
-                className={`icon-text-button ${viewMode === "reader" ? "active" : ""}`}
-                type="button"
-                onClick={() => setViewMode("reader")}
-              >
-                阅读器
-              </button>
-              <button
-                className={`icon-text-button ${viewMode === "graph" ? "active" : ""}`}
-                type="button"
-                aria-label="知识图谱"
-                onClick={() => setViewMode("graph")}
-              >
-                <GitBranch aria-hidden="true" size={16} />
-                知识图谱
-              </button>
-            </div>
-          </div>
+          <ReaderToolbar
+            canGenerateExplanations={viewMode === "reader" && activeDraft?.modelStatus === "generated" && Boolean(activeDraft.answerMarkdown.trim())}
+            generationDisabled={activeConversationRunning}
+            viewMode={viewMode}
+            onGenerateExplanations={() => void generateExplanationsForConversation()}
+            onViewModeChange={setViewMode}
+          />
 
           {viewMode === "graph" ? (
             activeKnowledgeGraphResult.error ? (
@@ -2236,32 +2203,14 @@ export function App() {
           )}
 
           {contextMenu ? (
-            <div
-              aria-label="阅读器右键菜单"
-              className="reader-context-menu"
-              role="menu"
-              style={{ left: contextMenu.x, top: contextMenu.y }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <button role="menuitem" type="button" onClick={insertInlineConversation}>
-                <MessageSquarePlus aria-hidden="true" size={15} />
-                在此处提问
-              </button>
-              {contextMenu.selectedText ? (
-                <>
-                  <div className="menu-selection">选区：{contextMenu.selectedText}</div>
-                  <div className="menu-separator" />
-                  <button role="menuitem" type="button" onClick={() => void createManualExplanation()}>
-                    <Highlighter aria-hidden="true" size={15} />
-                    为选区生成解释
-                  </button>
-                  <button role="menuitem" type="button" onClick={createRewriteDraft}>
-                    <PencilLine aria-hidden="true" size={15} />
-                    重写选区
-                  </button>
-                </>
-              ) : null}
-            </div>
+            <ReaderContextMenu
+              selectedText={contextMenu.selectedText}
+              x={contextMenu.x}
+              y={contextMenu.y}
+              onCreateManualExplanation={() => void createManualExplanation()}
+              onCreateRewriteDraft={createRewriteDraft}
+              onInsertInlineConversation={insertInlineConversation}
+            />
           ) : null}
         </main>
 

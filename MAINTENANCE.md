@@ -12,6 +12,23 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Reader Controls Refactor
+
+- Extracted reading toolbar and reader context menu presentation from `App.tsx` into `ReaderControls.tsx`.
+- Kept the existing reader business actions in `App.tsx` while moving UI for:
+  - search placeholder strip;
+  - reader / knowledge-graph view switching;
+  - `自动解释关键词` availability and disabled state;
+  - position-question context-menu action;
+  - selected-text explanation and rewrite actions.
+- Added component-level tests for toolbar mode switching, automatic explanation visibility/disabled state, and context-menu selected/non-selected states.
+- Reduced `App.tsx` from roughly 2,312 lines to roughly 2,260 lines.
+- Verification:
+  - `npm test -- --run src/ReaderControls.test.tsx`
+  - `npm test -- --run src/App.test.tsx -t "automatic explanation|context menu|manual explanation|rewrite draft|knowledge graph"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Home Page Refactor
 
 - Extracted the home project list and starter composer from `App.tsx` into `HomePage.tsx`.
