@@ -12,6 +12,24 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Explanation Panel Refactor
+
+- Extracted the right-side explanation chain and summary UI from `App.tsx` into `ExplanationPanel.tsx`.
+- Kept `App.tsx` responsible for state, persistence, model calls, and event orchestration while moving presentation for:
+  - explanation/summary mode switching;
+  - selected-text explanation progress;
+  - annotation-generation progress;
+  - reference-change explanation impacts;
+  - explanation card stack and nested explanation links;
+  - summary lists for explanations and saved inline questions.
+- Added component-level tests for chain-mode interactions, summary-mode interactions, KaTeX rendering in explanation text, rewrite callbacks, and inline-question summary callbacks.
+- Reduced `App.tsx` from roughly 2,526 lines to roughly 2,402 lines.
+- Verification:
+  - `npm test -- --run src/ExplanationPanel.test.tsx`
+  - `npm test -- --run src/ExplanationPanel.test.tsx src/App.test.tsx -t "summary panel|manual explanation progress|explanation text|参考状态变更|解释链"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Sidebar Style Regression Fix
 
 - Restored the extracted project sidebar to the existing workspace sidebar style contract.

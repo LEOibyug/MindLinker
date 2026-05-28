@@ -38,6 +38,7 @@ import { InlineConversationDialog, renderInlineConversationMarker } from "./Inli
 import type { InlineConversationDraft } from "./InlineConversationUi";
 import type { InlineConversation, InlineConversationMarkerBinding, InlineConversationMessage } from "./inlineConversations";
 import { getInlineConversationAnchorText } from "./inlineConversations";
+import { ExplanationPanel } from "./ExplanationPanel";
 import { KnowledgeGraphView } from "./KnowledgeGraphView";
 import { buildDraftKnowledgeGraph, buildFallbackMarkedTerms, buildProjectKnowledgeGraph } from "./knowledgeGraph";
 import {
@@ -1917,17 +1918,6 @@ export function App() {
       </div>
     ) : null;
 
-  const renderManualExplanationProgress = () =>
-    manualExplanationPending ? (
-      <div className="manual-explanation-progress" role="status" aria-label="选区解释生成中">
-        <span className="loader-ring small-ring" aria-hidden="true" />
-        <div>
-          <strong>正在为选区生成解释</strong>
-          <p>{manualExplanationPending}</p>
-        </div>
-      </div>
-    ) : null;
-
   const renderSettingsPage = () => (
     <SettingsPage
       activeProviderId={activeProviderId}
@@ -2366,137 +2356,23 @@ export function App() {
           ) : null}
         </main>
 
-        <aside className="explanation-panel" aria-label="解释与来源">
-          <div className="panel-title">
-            <Network aria-hidden="true" size={17} />
-            <h2>解释链</h2>
-          </div>
-          <div className="panel-segmented-control" role="group" aria-label="解释面板视图">
-            <button
-              className={explanationPanelMode === "chain" ? "active" : ""}
-              type="button"
-              onClick={() => setExplanationPanelMode("chain")}
-            >
-              解释
-            </button>
-            <button
-              className={explanationPanelMode === "summary" ? "active" : ""}
-              type="button"
-              onClick={() => setExplanationPanelMode("summary")}
-            >
-              汇总
-            </button>
-          </div>
-          {renderManualExplanationProgress()}
-          {generationPhase === "annotations" ? (
-            <div className="chain-sync" role="status" aria-label="解释链生成中">
-              <span className="loader-ring small-ring" aria-hidden="true" />
-              <div>
-                <strong>{explanationStack.length > 0 ? "正在补充延伸解释" : "正在生成解释链"}</strong>
-                <p>正文已可阅读，解释锚点会在返回后逐个点亮。</p>
-              </div>
-            </div>
-          ) : null}
-          {activeReferencePlan ? (
-            <section className="explanation-impact-panel" aria-label="解释链变更反馈">
-              <h3>参考状态变更</h3>
-              {activeReferencePlan.impacts.map((impact) => (
-                <article key={impact.term}>
-                  <strong>{impact.term}</strong>
-                  <span>{impact.summary}</span>
-                  <small>
-                    {impact.previousReferenceState} → {impact.nextReferenceState}
-                  </small>
-                  <button className="ghost-button" type="button" onClick={() => void rewriteExplanation(impact.term)}>
-                    重写解释
-                  </button>
-                </article>
-              ))}
-            </section>
-          ) : null}
-
-          {explanationPanelMode === "summary" ? (
-            <section className="summary-panel" role="region" aria-label="汇总面板">
-              <div className="summary-section">
-                <h3>解释项</h3>
-                {activeConversationExplanations.length > 0 ? (
-                  activeConversationExplanations.map((explanation) => (
-                    <button
-                      className="summary-item"
-                      key={explanation.id ?? explanation.term}
-                      type="button"
-                      aria-label={`解释项 ${explanation.term}`}
-                      onClick={() => openExplanation(explanation.term)}
-                    >
-                      <strong>{explanation.term}</strong>
-                      <span>{explanation.source}</span>
-                    </button>
-                  ))
-                ) : (
-                  <p className="empty-sidebar-note">暂无解释项</p>
-                )}
-              </div>
-              <div className="summary-section">
-                <h3>问答</h3>
-                {activeInlineConversations.length > 0 ? (
-                  activeInlineConversations.map((conversation) => {
-                    const title = getInlineConversationTitle(conversation);
-                    return (
-                      <button
-                        className="summary-item"
-                        key={conversation.id}
-                        type="button"
-                        aria-label={`问答 ${title}`}
-                        onClick={() => openInlineConversationFromSummary(conversation)}
-                      >
-                        <strong>{title}</strong>
-                        <span>{conversation.positionLabel}</span>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <p className="empty-sidebar-note">暂无位置问答</p>
-                )}
-              </div>
-            </section>
-          ) : (
-            <div className="explanation-stack" aria-label="解释卡片堆叠">
-              {visibleStack.map((explanation, index) =>
-                index === 0 ? (
-                  <article
-                    className="explanation-card active-card"
-                    data-explanation-term={explanation.term}
-                    key={explanation.term}
-                    onContextMenu={openReaderMenu}
-                  >
-                    <p className="eyebrow">最新解释</p>
-                    <h2>{explanation.term}</h2>
-                    <div className="explanation-body">
-                      {renderAnswerText(
-                        explanation.body,
-                        getExplanationBodyTerms(explanation.body, explanation.term),
-                        true,
-                        openExplanation
-                      )}
-                    </div>
-                    <div className="source-box">{explanation.source}</div>
-                  </article>
-                ) : (
-                  <button
-                    className="stacked-card-preview"
-                    key={explanation.term}
-                    type="button"
-                    aria-label={`回看 ${explanation.term}`}
-                    onClick={() => previewExplanation(explanation.term)}
-                  >
-                    <span>{explanation.term}</span>
-                    <small>{explanation.source}</small>
-                  </button>
-                )
-              )}
-            </div>
-          )}
-        </aside>
+        <ExplanationPanel
+          activeInlineConversations={activeInlineConversations}
+          explanations={activeConversationExplanations}
+          generationPhase={generationPhase}
+          manualExplanationPending={manualExplanationPending}
+          mode={explanationPanelMode}
+          referencePlan={activeReferencePlan}
+          visibleStack={visibleStack}
+          getExplanationBodyTerms={getExplanationBodyTerms}
+          getInlineConversationTitle={getInlineConversationTitle}
+          onContextMenu={openReaderMenu}
+          onExplanationOpen={openExplanation}
+          onInlineConversationOpen={openInlineConversationFromSummary}
+          onModeChange={setExplanationPanelMode}
+          onPreviewExplanation={previewExplanation}
+          onRewriteExplanation={(term) => void rewriteExplanation(term)}
+        />
       </div>
 
       {settingsOpen ? renderSettingsPage() : null}
