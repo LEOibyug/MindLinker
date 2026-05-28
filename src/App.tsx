@@ -1,9 +1,3 @@
-import {
-  Brain,
-  Network,
-  Settings,
-  X
-} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildConversationDraft,
@@ -54,6 +48,7 @@ import {
 import { NewConversationPanel } from "./NewConversationPanel";
 import { ProjectSidebar } from "./ProjectSidebar";
 import { HomePage } from "./HomePage";
+import { AppChrome } from "./AppChrome";
 import { ReaderContent } from "./ReaderContent";
 import { ReaderContextMenu, ReaderToolbar } from "./ReaderControls";
 
@@ -1898,16 +1893,6 @@ export function App() {
     setNotice("已重建当前项目索引");
   };
 
-  const renderToast = () =>
-    notice ? (
-      <div className="toast" role="status">
-        {notice}
-        <button type="button" aria-label="关闭通知" onClick={() => setNotice(null)}>
-          <X aria-hidden="true" size={14} />
-        </button>
-      </div>
-    ) : null;
-
   const renderSettingsPage = () => (
     <SettingsPage
       activeProviderId={activeProviderId}
@@ -1936,30 +1921,17 @@ export function App() {
 
   if (appView === "home") {
     return (
-      <div className="app-shell home-shell" onClick={() => setContextMenu(null)}>
-        {renderToast()}
-        <header className="topbar" aria-label="MindLinker">
-          <div className="brand">
-            <Brain aria-hidden="true" size={24} />
-            <div>
-              <strong>MindLinker</strong>
-              <span>课程、理论与论文阅读</span>
-            </div>
-          </div>
-          <div className="topbar-actions">
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="打开设置"
-              onClick={() => {
-                setSettingsReturnView("home");
-                setSettingsOpen(true);
-              }}
-            >
-              <Settings aria-hidden="true" size={18} />
-            </button>
-          </div>
-        </header>
+      <AppChrome
+        className="home-shell"
+        notice={notice}
+        subtitle="课程、理论与论文阅读"
+        onDismissNotice={() => setNotice(null)}
+        onOpenSettings={() => {
+          setSettingsReturnView("home");
+          setSettingsOpen(true);
+        }}
+        onShellClick={() => setContextMenu(null)}
+      >
         {settingsOpen ? renderSettingsPage() : null}
         <HomePage
           answerMode={homeAnswerMode}
@@ -1976,40 +1948,22 @@ export function App() {
           onRemoveReference={removeHomeReference}
           onStart={() => void startProjectFromPrompt()}
         />
-      </div>
+      </AppChrome>
     );
   }
 
   return (
-    <div className="app-shell" onClick={() => setContextMenu(null)}>
-      {renderToast()}
-      <header className="topbar" aria-label="MindLinker">
-        <div className="brand">
-          <Brain aria-hidden="true" size={24} />
-          <div>
-            <strong>MindLinker</strong>
-            <span>{activeProjectTitle}</span>
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <button className="icon-text-button" type="button" aria-label="管理向量库" onClick={() => setVectorStoreOpen(true)}>
-            <Network aria-hidden="true" size={16} />
-            向量库
-          </button>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="打开设置"
-            onClick={() => {
-              setSettingsReturnView("workspace");
-              setSettingsOpen(true);
-            }}
-          >
-            <Settings aria-hidden="true" size={18} />
-          </button>
-        </div>
-      </header>
-
+    <AppChrome
+      notice={notice}
+      subtitle={activeProjectTitle}
+      onDismissNotice={() => setNotice(null)}
+      onOpenSettings={() => {
+        setSettingsReturnView("workspace");
+        setSettingsOpen(true);
+      }}
+      onOpenVectorStore={() => setVectorStoreOpen(true)}
+      onShellClick={() => setContextMenu(null)}
+    >
       <div className="workspace" aria-hidden={settingsOpen ? true : undefined}>
         <ProjectSidebar
           activeConversationId={activeConversation.id}
@@ -2153,6 +2107,6 @@ export function App() {
           onRebuildActiveStore={rebuildActiveVectorStore}
         />
       ) : null}
-    </div>
+    </AppChrome>
   );
 }

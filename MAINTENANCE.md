@@ -12,6 +12,23 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - App Chrome Refactor
+
+- Extracted the repeated application shell chrome from `App.tsx` into `AppChrome.tsx`.
+- Kept app state and navigation decisions in `App.tsx` while moving presentation for:
+  - shared MindLinker topbar and subtitle;
+  - home/workspace settings entry;
+  - workspace vector-store entry;
+  - dismissible runtime notice toast;
+  - shared app-shell wrapper click handling.
+- Added component-level tests for brand/subtitle rendering, settings action, vector-store action, child rendering, and notice dismissal.
+- Reduced `App.tsx` from roughly 2,158 lines to roughly 2,112 lines.
+- Verification:
+  - `npm test -- --run src/AppChrome.test.tsx`
+  - `npm test -- --run src/App.test.tsx -t "MindLinker shell|opens settings from a compact toolbar button|manages local vector stores|switches between learning projects|provider test failures|auto-dismisses ordinary status"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Reader Content Refactor
 
 - Extracted the central reader content surface from `App.tsx` into `ReaderContent.tsx`.
