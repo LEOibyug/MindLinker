@@ -41,7 +41,10 @@ import {
   buildInitialProjectConversation,
   buildProjectFromHomeStart,
   buildProjectNavigationTarget,
-  getConversationGenerationPhase
+  deleteConversationFromProject,
+  deleteProjectFromCollections,
+  getConversationGenerationPhase,
+  removeProjectDocument
 } from "../domain/projectLifecycle";
 import { testProviderConnectionRequest, testProviderModelRequest } from "../services/providerDiagnostics";
 import {
@@ -851,62 +854,34 @@ export function App() {
       setNotice(`再次确认后会删除项目：${projectTitles[projectId] ?? projectToDelete.title}`);
       return;
     }
-    if (localProjects.length <= 1) {
-      const removedDocumentIds = [...projectToDelete.documents];
-      const removedConversationIds = new Set(projectToDelete.conversations.map((conversation) => conversation.id));
-      setLocalProjects([]);
-      setProjectTitles({});
-      setIncludedDocumentIds({});
-      setParsedProjectReferences((documents) => documents.filter((document) => !removedDocumentIds.includes(document.id)));
-      setReferenceParseCache({});
-      setStoredConversationDrafts((drafts) =>
-        Object.fromEntries(Object.entries(drafts).filter(([conversationId]) => !removedConversationIds.has(conversationId)))
-      );
-      setConversationExplanations((items) =>
-        Object.fromEntries(Object.entries(items).filter(([conversationId]) => !removedConversationIds.has(conversationId)))
-      );
-      setInlineConversations((conversations) => conversations.filter((conversation) => conversation.projectId !== projectId));
+    const deletion = deleteProjectFromCollections({
+      projectId,
+      projects: localProjects,
+      projectTitles,
+      includedDocumentIds,
+      parsedReferences,
+      referenceParseCache,
+      drafts: conversationDrafts,
+      explanations: conversationExplanations,
+      inlineConversations
+    });
+    setLocalProjects(deletion.projects);
+    setProjectTitles(deletion.projectTitles);
+    setIncludedDocumentIds(deletion.includedDocumentIds);
+    setParsedProjectReferences(deletion.parsedReferences);
+    setReferenceParseCache(deletion.referenceParseCache);
+    setStoredConversationDrafts(deletion.drafts);
+    setConversationExplanations(deletion.explanations);
+    setInlineConversations(deletion.inlineConversations);
+    if (!deletion.nextProject) {
       setActiveProjectId("");
       setActiveConversationId("");
       setAppView("home");
       setNotice("已删除当前学习项目");
       return;
     }
-    const nextProjects = localProjects.filter((project) => project.id !== projectId);
-    const nextProject = nextProjects[0];
-    const removedDocumentIds = [...projectToDelete.documents];
-    const removedConversationIds = new Set(projectToDelete.conversations.map((conversation) => conversation.id));
-    setLocalProjects(nextProjects);
-    setProjectTitles((titles) => {
-      const nextTitles = { ...titles };
-      delete nextTitles[projectId];
-      return nextTitles;
-    });
-    setIncludedDocumentIds((documentsByProject) => {
-      const nextDocuments = { ...documentsByProject };
-      delete nextDocuments[projectId];
-      return nextDocuments;
-    });
-    setParsedProjectReferences((documents) => documents.filter((document) => !removedDocumentIds.includes(document.id)));
-    setReferenceParseCache((cache) => {
-      const remainingDocuments = parsedReferences.filter((document) => !removedDocumentIds.includes(document.id));
-      return Object.fromEntries(
-        Object.entries(cache).filter(([, entry]) =>
-          remainingDocuments.some(
-            (document) => document.title === entry.document.title && document.version === entry.document.version && document.kind === entry.document.kind
-          )
-        )
-      );
-    });
-    setStoredConversationDrafts((drafts) =>
-      Object.fromEntries(Object.entries(drafts).filter(([conversationId]) => !removedConversationIds.has(conversationId)))
-    );
-    setConversationExplanations((items) =>
-      Object.fromEntries(Object.entries(items).filter(([conversationId]) => !removedConversationIds.has(conversationId)))
-    );
-    setInlineConversations((conversations) => conversations.filter((conversation) => conversation.projectId !== projectId));
-    setActiveProjectId(nextProject.id);
-    const target = buildProjectNavigationTarget(nextProject);
+    setActiveProjectId(deletion.nextProject.id);
+    const target = buildProjectNavigationTarget(deletion.nextProject);
     setActiveConversationId(target.conversationId);
     setAvailableExplanations(conversationExplanations[target.conversationId] ?? []);
     setExplanationStack([]);
@@ -1157,27 +1132,26 @@ export function App() {
       setNotice(`再次确认后会删除对话：${conversation.title}`);
       return;
     }
-    const remainingConversations = activeProject.conversations.filter((item) => item.id !== conversationId);
+    const deletion = deleteConversationFromProject({
+      project: activeProject,
+      conversationId,
+      drafts: conversationDrafts,
+      explanations: conversationExplanations,
+      inlineConversations,
+      runningConversationIds
+    });
     setLocalProjects((projects) =>
-      projects.map((project) => (project.id === activeProject.id ? { ...project, conversations: remainingConversations } : project))
+      projects.map((project) => (project.id === activeProject.id ? deletion.project : project))
     );
-    setStoredConversationDrafts((drafts) => {
-      const nextDrafts = { ...drafts };
-      delete nextDrafts[conversationId];
-      return nextDrafts;
-    });
-    setConversationExplanations((items) => {
-      const nextItems = { ...items };
-      delete nextItems[conversationId];
-      return nextItems;
-    });
-    setInlineConversations((conversations) => conversations.filter((conversation) => conversation.conversationId !== conversationId));
-    setRunningConversationIds((ids) => ids.filter((id) => id !== conversationId));
+    setStoredConversationDrafts(deletion.drafts);
+    setConversationExplanations(deletion.explanations);
+    setInlineConversations(deletion.inlineConversations);
+    setRunningConversationIds(deletion.runningConversationIds);
     setConfirmingConversationDeleteId(null);
-    const nextConversation = remainingConversations[0] ?? emptyConversation;
+    const nextConversation = deletion.nextConversation ?? emptyConversation;
     if (activeConversation.id === conversationId) {
       setActiveConversationId(nextConversation.id);
-      setAvailableExplanations(nextConversation.id ? conversationExplanations[nextConversation.id] ?? [] : []);
+      setAvailableExplanations(nextConversation.id ? deletion.explanations[nextConversation.id] ?? [] : []);
       setExplanationStack([]);
       setGenerationPhase(getConversationGenerationPhase(nextConversation.status));
       setAnnotationsRevealed(hasRestorableAnnotations(nextConversation.id, nextConversation.status));
@@ -1195,15 +1169,14 @@ export function App() {
       setNotice(`再次确认后会删除参考：${document.title}`);
       return;
     }
-    setIncludedDocumentIds((documentsByProject) => ({
-      ...documentsByProject,
-      [activeProject.id]: (documentsByProject[activeProject.id] ?? []).filter((item) => item !== documentId)
-    }));
-    setLocalProjects((projects) =>
-      projects.map((project) =>
-        project.id === activeProject.id ? { ...project, documents: project.documents.filter((item) => item !== documentId) } : project
-      )
-    );
+    const removal = removeProjectDocument({
+      projectId: activeProject.id,
+      documentId,
+      projects: localProjects,
+      includedDocumentIds
+    });
+    setIncludedDocumentIds(removal.includedDocumentIds);
+    setLocalProjects(removal.projects);
     pruneParsedReferences([documentId]);
     setConfirmingReferenceDeleteId(null);
     setReferencePlanId("remove-notes-full-rewrite");

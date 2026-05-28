@@ -12,6 +12,19 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Project Deletion Rules Refactor
+
+- Extracted project, conversation, and project-reference deletion data rules into `domain/projectLifecycle.ts`.
+- Moved pure cleanup logic for project titles, included document ids, parsed references, reference cache, drafts, explanations, inline conversations, running conversations, and next active targets out of `App.tsx`.
+- Kept user-facing delete confirmations, notices, and UI state transitions in `App.tsx`.
+- Added domain tests for project deletion cleanup, conversation deletion cleanup, and reference id removal scoped to one project.
+- Reduced `App.tsx` from roughly 1,735 lines to roughly 1,708 lines.
+- Verification:
+  - `npm test -- --run src/domain/projectLifecycle.test.ts`
+  - `npm test -- --run src/app/App.test.tsx -t "delete|删除|referenceParseCache|parsed references|删除参考|删除项目|删除对话|confirmation"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Reader Context Menu Anchor Refactor
 
 - Extracted reader right-click/selection anchor calculation from `App.tsx` into `components/reader/readerInteraction.ts`.
