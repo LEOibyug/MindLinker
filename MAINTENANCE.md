@@ -12,6 +12,22 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Provider Diagnostics Refactor
+
+- Extracted provider/model connection-test request construction from `App.tsx` into `services/providerDiagnostics.ts`.
+- Kept settings validation, notices, and runtime logging in `App.tsx` while moving pure/network request logic for:
+  - normalized provider test URLs;
+  - provider `/models` checks with bearer auth;
+  - model checks for both Chat Completions and Responses API formats;
+  - readable HTTP failure errors.
+- Added service-level tests for URL normalization, auth headers, chat/responses payloads, and failure handling.
+- Reduced `App.tsx` from roughly 2,025 lines to roughly 1,991 lines.
+- Verification:
+  - `npm test -- --run src/services/providerDiagnostics.test.ts`
+  - `npm test -- --run src/app/App.test.tsx -t "provider and model test buttons|provider test failures|API formats|Responses API|configured main provider|custom API providers"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Home Reference Logic Refactor
 
 - Extracted home-screen reference preflight helpers from `App.tsx` into `services/homeReferences.ts`.

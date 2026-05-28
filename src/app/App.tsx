@@ -28,6 +28,7 @@ import {
   removeHomeReferenceItem,
   resolveHomeReferenceDocuments
 } from "../services/homeReferences";
+import { testProviderConnectionRequest, testProviderModelRequest } from "../services/providerDiagnostics";
 import {
   buildRewritePrompt,
   findChatModelConfig,
@@ -1140,11 +1141,6 @@ export function App() {
     setNotice("已删除模型");
   };
 
-  const buildProviderUrl = (provider: ProviderConfig, path: string) => {
-    const baseUrl = provider.baseUrl.replace(/\/+$/, "");
-    return `${baseUrl}${path}`;
-  };
-
   const testProviderConnection = async (provider: ProviderConfig) => {
     if (!provider.baseUrl.trim()) {
       setNotice(`请先填写${provider.name}的 Base URL`);
@@ -1157,16 +1153,8 @@ export function App() {
       apiFormat: provider.apiFormat
     });
     try {
-      const response = await fetch(buildProviderUrl(provider, "/models"), {
-        method: "GET",
-        headers: {
-          ...(provider.apiKey?.trim() ? { Authorization: `Bearer ${provider.apiKey}` } : {})
-        }
-      });
-      if (!response.ok) {
-        throw new Error(`${response.status} ${response.statusText}`.trim());
-      }
-      appendRuntimeLog("settings", "供应商连接测试通过", { provider: provider.name, status: response.status });
+      const result = await testProviderConnectionRequest(provider);
+      appendRuntimeLog("settings", "供应商连接测试通过", { provider: provider.name, status: result.status });
       setNotice(`${provider.name} 连接检查已通过`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1192,30 +1180,8 @@ export function App() {
       apiFormat: provider.apiFormat
     });
     try {
-      const isResponses = provider.apiFormat === "openai-responses";
-      const response = await fetch(buildProviderUrl(provider, isResponses ? "/responses" : "/chat/completions"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(provider.apiKey?.trim() ? { Authorization: `Bearer ${provider.apiKey}` } : {})
-        },
-        body: JSON.stringify(
-          isResponses
-            ? {
-                model: model.name,
-                input: "ping"
-              }
-            : {
-                model: model.name,
-                messages: [{ role: "user", content: "ping" }],
-                max_tokens: 1
-              }
-        )
-      });
-      if (!response.ok) {
-        throw new Error(`${response.status} ${response.statusText}`.trim());
-      }
-      appendRuntimeLog("settings", "模型连接测试通过", { provider: provider.name, model: model.name, status: response.status });
+      const result = await testProviderModelRequest(provider, model);
+      appendRuntimeLog("settings", "模型连接测试通过", { provider: provider.name, model: model.name, status: result.status });
       setNotice(`${model.name} 模型检查已通过`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
