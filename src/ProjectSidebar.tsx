@@ -3,7 +3,7 @@ import type { LearningProject } from "./domain";
 import { middleEllipsis } from "./conversationDrafts";
 import type { ParsedReferenceDocument } from "./pdfReferences";
 
-type ProjectSidebarProps = {
+export type ProjectSidebarProps = {
   activeConversationId: string;
   activeDocumentIds: string[];
   activeProjectId: string;

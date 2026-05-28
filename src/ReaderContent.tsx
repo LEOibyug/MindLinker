@@ -19,7 +19,7 @@ type RenderInlineConversationMarker = (
   key?: string
 ) => ReactNode;
 
-type ReaderContentProps = {
+export type ReaderContentProps = {
   activeDraft: ConversationDraft | null;
   activeInlineConversations: InlineConversation[];
   annotationsRevealed: boolean;

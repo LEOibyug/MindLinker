@@ -12,6 +12,24 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Workspace View Refactor
+
+- Extracted the workspace three-column composition from `App.tsx` into `WorkspaceView.tsx`.
+- Kept application state, model orchestration, persistence, and event handlers in `App.tsx` while moving presentation composition for:
+  - project sidebar;
+  - reader toolbar;
+  - reader content surface;
+  - reader context menu;
+  - explanation panel.
+- Exported the existing component prop types so `WorkspaceView` can compose those boundaries without duplicating contracts.
+- Added component-level tests for workspace composition, automatic-explanation toolbar wiring, settings-hidden state, and reader context-menu rendering.
+- Reduced `App.tsx` from roughly 2,112 lines to roughly 2,106 lines while moving the JSX surface behind a named component boundary.
+- Verification:
+  - `npm test -- --run src/WorkspaceView.test.tsx`
+  - `npm test -- --run src/App.test.tsx -t "renders the reader-centered workspace|context menu|knowledge graph|automatic explanation|summary panel|folder with reference|project titles|new conversation|inline question"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - App Chrome Refactor
 
 - Extracted the repeated application shell chrome from `App.tsx` into `AppChrome.tsx`.

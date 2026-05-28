@@ -7,7 +7,7 @@ import type { InlineConversation } from "./inlineConversations";
 
 export type ExplanationPanelMode = "chain" | "summary";
 
-type ExplanationPanelProps = {
+export type ExplanationPanelProps = {
   activeInlineConversations: InlineConversation[];
   explanations: Explanation[];
   generationPhase: "idle" | "content" | "annotations" | "ready";

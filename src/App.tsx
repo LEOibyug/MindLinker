@@ -46,11 +46,9 @@ import {
   stripExplainableMarkers
 } from "./markedTerms";
 import { NewConversationPanel } from "./NewConversationPanel";
-import { ProjectSidebar } from "./ProjectSidebar";
 import { HomePage } from "./HomePage";
 import { AppChrome } from "./AppChrome";
-import { ReaderContent } from "./ReaderContent";
-import { ReaderContextMenu, ReaderToolbar } from "./ReaderControls";
+import { WorkspaceView } from "./WorkspaceView";
 
 type ContextMenuState = {
   x: number;
@@ -1964,126 +1962,122 @@ export function App() {
       onOpenVectorStore={() => setVectorStoreOpen(true)}
       onShellClick={() => setContextMenu(null)}
     >
-      <div className="workspace" aria-hidden={settingsOpen ? true : undefined}>
-        <ProjectSidebar
-          activeConversationId={activeConversation.id}
-          activeDocumentIds={activeDocumentIds}
-          activeProjectId={activeProject.id}
-          activeProjectTitle={activeProjectTitle}
-          allDocuments={allDocuments}
-          confirmingConversationDeleteId={confirmingConversationDeleteId}
-          confirmingProjectDeleteId={confirmingProjectDeleteId}
-          confirmingReferenceDeleteId={confirmingReferenceDeleteId}
-          editingTitle={editingTitle}
-          projectTitles={projectTitles}
-          projects={localProjects}
-          runningConversationIds={runningConversationIds}
-          onCreateProject={createProject}
-          onDeleteConversation={deleteConversation}
-          onDeleteProject={deleteProject}
-          onDeleteReference={deleteProjectReference}
-          onIntroduceReference={introduceReference}
-          onNewConversation={() => {
+      <WorkspaceView
+        settingsOpen={settingsOpen}
+        sidebarProps={{
+          activeConversationId: activeConversation.id,
+          activeDocumentIds,
+          activeProjectId: activeProject.id,
+          activeProjectTitle,
+          allDocuments,
+          confirmingConversationDeleteId,
+          confirmingProjectDeleteId,
+          confirmingReferenceDeleteId,
+          editingTitle,
+          projectTitles,
+          projects: localProjects,
+          runningConversationIds,
+          onCreateProject: createProject,
+          onDeleteConversation: deleteConversation,
+          onDeleteProject: deleteProject,
+          onDeleteReference: deleteProjectReference,
+          onIntroduceReference: introduceReference,
+          onNewConversation: () => {
             setViewMode("reader");
             setNewConversationOpen(true);
-          }}
-          onEditProjectTitle={() => setEditingTitle(true)}
-          onGenerateProjectTitle={() => {
+          },
+          onEditProjectTitle: () => setEditingTitle(true),
+          onGenerateProjectTitle: () => {
             setEditingTitle(true);
             setProjectTitles((titles) => ({ ...titles, [activeProject.id]: "交叉熵与分布学习" }));
-          }}
-          onSetProjectTitle={(title) =>
+          },
+          onSetProjectTitle: (title) =>
             setProjectTitles((titles) => ({
               ...titles,
               [activeProject.id]: title
-            }))
-          }
-          onSwitchConversation={switchConversation}
-          onSwitchProject={switchProject}
-          onWorkspaceReferencesSelected={(files) => void addWorkspaceReferences(files)}
-        />
-
-        <main className="reader-panel" aria-label="阅读区">
-          <ReaderToolbar
-            canGenerateExplanations={viewMode === "reader" && activeDraft?.modelStatus === "generated" && Boolean(activeDraft.answerMarkdown.trim())}
-            generationDisabled={activeConversationRunning}
-            viewMode={viewMode}
-            onGenerateExplanations={() => void generateExplanationsForConversation()}
-            onViewModeChange={setViewMode}
-          />
-
-          <ReaderContent
-            activeDraft={activeDraft}
-            activeInlineConversations={activeInlineConversations}
-            annotationsRevealed={annotationsRevealed}
-            appliedPatch={appliedPatch}
-            conversationTitle={activeConversation.title}
-            fullRewriteApplied={fullRewriteApplied}
-            generationPhase={generationPhase}
-            graph={activeKnowledgeGraph}
-            graphError={activeKnowledgeGraphResult.error}
-            graphTitle={activeConversation.title}
-            newConversationOpen={newConversationOpen}
-            newConversationPanel={renderNewConversationPanel()}
-            referencePlan={activeReferencePlan}
-            renderedConversationExplanations={renderedConversationExplanations}
-            rewriteDraft={rewriteDraft}
-            rewritePrompt={rewriteDraft ? buildRewritePrompt(rewriteDraft) : ""}
-            viewMode={viewMode}
-            onApplyFullRewrite={applyFullRewrite}
-            onApplyReferencePatch={applyReferencePatch}
-            onContextMenu={openReaderMenu}
-            onExplanationOpen={openExplanation}
-            onGraphError={(error, info) => {
-              appendRuntimeLog(
-                "graph",
-                "知识图谱渲染失败",
-                {
-                  message: error.message,
-                  stack: error.stack,
-                  componentStack: info.componentStack,
-                  projectId: activeProject.id,
-                  conversationId: activeConversation.id,
-                  nodeCount: activeKnowledgeGraph.nodes.length,
-                  edgeCount: activeKnowledgeGraph.edges.length
-                },
-                "error"
-              );
-            }}
-            onInlineConversationOpen={openInlineConversation}
-            renderInlineConversationMarker={renderInlineConversationMarker}
-          />
-
-          {contextMenu ? (
-            <ReaderContextMenu
-              selectedText={contextMenu.selectedText}
-              x={contextMenu.x}
-              y={contextMenu.y}
-              onCreateManualExplanation={() => void createManualExplanation()}
-              onCreateRewriteDraft={createRewriteDraft}
-              onInsertInlineConversation={insertInlineConversation}
-            />
-          ) : null}
-        </main>
-
-        <ExplanationPanel
-          activeInlineConversations={activeInlineConversations}
-          explanations={activeConversationExplanations}
-          generationPhase={generationPhase}
-          manualExplanationPending={manualExplanationPending}
-          mode={explanationPanelMode}
-          referencePlan={activeReferencePlan}
-          visibleStack={visibleStack}
-          getExplanationBodyTerms={getExplanationBodyTerms}
-          getInlineConversationTitle={getInlineConversationTitle}
-          onContextMenu={openReaderMenu}
-          onExplanationOpen={openExplanation}
-          onInlineConversationOpen={openInlineConversationFromSummary}
-          onModeChange={setExplanationPanelMode}
-          onPreviewExplanation={previewExplanation}
-          onRewriteExplanation={(term) => void rewriteExplanation(term)}
-        />
-      </div>
+            })),
+          onSwitchConversation: switchConversation,
+          onSwitchProject: switchProject,
+          onWorkspaceReferencesSelected: (files) => void addWorkspaceReferences(files)
+        }}
+        toolbarProps={{
+          canGenerateExplanations: viewMode === "reader" && activeDraft?.modelStatus === "generated" && Boolean(activeDraft.answerMarkdown.trim()),
+          generationDisabled: activeConversationRunning,
+          viewMode,
+          onGenerateExplanations: () => void generateExplanationsForConversation(),
+          onViewModeChange: setViewMode
+        }}
+        contentProps={{
+          activeDraft,
+          activeInlineConversations,
+          annotationsRevealed,
+          appliedPatch,
+          conversationTitle: activeConversation.title,
+          fullRewriteApplied,
+          generationPhase,
+          graph: activeKnowledgeGraph,
+          graphError: activeKnowledgeGraphResult.error,
+          graphTitle: activeConversation.title,
+          newConversationOpen,
+          newConversationPanel: renderNewConversationPanel(),
+          referencePlan: activeReferencePlan,
+          renderedConversationExplanations,
+          rewriteDraft,
+          rewritePrompt: rewriteDraft ? buildRewritePrompt(rewriteDraft) : "",
+          viewMode,
+          onApplyFullRewrite: applyFullRewrite,
+          onApplyReferencePatch: applyReferencePatch,
+          onContextMenu: openReaderMenu,
+          onExplanationOpen: openExplanation,
+          onGraphError: (error, info) => {
+            appendRuntimeLog(
+              "graph",
+              "知识图谱渲染失败",
+              {
+                message: error.message,
+                stack: error.stack,
+                componentStack: info.componentStack,
+                projectId: activeProject.id,
+                conversationId: activeConversation.id,
+                nodeCount: activeKnowledgeGraph.nodes.length,
+                edgeCount: activeKnowledgeGraph.edges.length
+              },
+              "error"
+            );
+          },
+          onInlineConversationOpen: openInlineConversation,
+          renderInlineConversationMarker
+        }}
+        contextMenuProps={
+          contextMenu
+            ? {
+                selectedText: contextMenu.selectedText,
+                x: contextMenu.x,
+                y: contextMenu.y,
+                onCreateManualExplanation: () => void createManualExplanation(),
+                onCreateRewriteDraft: createRewriteDraft,
+                onInsertInlineConversation: insertInlineConversation
+              }
+            : null
+        }
+        explanationPanelProps={{
+          activeInlineConversations,
+          explanations: activeConversationExplanations,
+          generationPhase,
+          manualExplanationPending,
+          mode: explanationPanelMode,
+          referencePlan: activeReferencePlan,
+          visibleStack,
+          getExplanationBodyTerms,
+          getInlineConversationTitle,
+          onContextMenu: openReaderMenu,
+          onExplanationOpen: openExplanation,
+          onInlineConversationOpen: openInlineConversationFromSummary,
+          onModeChange: setExplanationPanelMode,
+          onPreviewExplanation: previewExplanation,
+          onRewriteExplanation: (term) => void rewriteExplanation(term)
+        }}
+      />
 
       {settingsOpen ? renderSettingsPage() : null}
 

@@ -2,7 +2,7 @@ import { GitBranch, Highlighter, MessageSquarePlus, PencilLine, Search, Sparkles
 
 export type ReaderViewMode = "reader" | "graph";
 
-type ReaderToolbarProps = {
+export type ReaderToolbarProps = {
   canGenerateExplanations: boolean;
   generationDisabled: boolean;
   viewMode: ReaderViewMode;
@@ -56,7 +56,7 @@ export function ReaderToolbar({
   );
 }
 
-type ReaderContextMenuProps = {
+export type ReaderContextMenuProps = {
   selectedText: string;
   x: number;
   y: number;
