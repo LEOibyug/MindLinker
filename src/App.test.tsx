@@ -2137,6 +2137,45 @@ describe("MindLinker shell", () => {
     expect(screen.getByRole("dialog", { name: "在此处提问" }).querySelector(".inline-math .katex")).toBeInTheDocument();
   });
 
+  it("extracts inline question answers from non-streaming Responses output content", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output: [
+          {
+            type: "message",
+            content: [
+              {
+                type: "output_text",
+                text: "切平面是在凸函数图像下方支撑函数的仿射平面。"
+              }
+            ]
+          }
+        ]
+      })
+    } as Response);
+    renderWithSeededProjects();
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.selectOptions(screen.getByLabelText("自定义兼容接口 API 格式"), "openai-responses");
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    await enterWorkspace(user);
+
+    fireEvent.contextMenu(screen.getByRole("article", { name: "回答正文" }), {
+      clientX: 320,
+      clientY: 240
+    });
+    await user.click(screen.getByRole("menuitem", { name: "在此处提问" }));
+    await user.type(screen.getByLabelText("当前位置提问"), "切平面是什么？");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+
+    expect(await screen.findByText("切平面是在凸函数图像下方支撑函数的仿射平面。")).toBeInTheDocument();
+    expect(screen.queryByText("模型没有返回位置提问回答")).not.toBeInTheDocument();
+  });
+
   it("renders saved inline question markers at the selected text location", async () => {
     const user = userEvent.setup();
     seedExistingProjects();
@@ -2268,6 +2307,91 @@ describe("MindLinker shell", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "模型会输出一个预测的概率分布" })).toBeInTheDocument());
     expect(screen.getByText("这是模型基于选区生成的解释。")).toBeInTheDocument();
     expect(screen.getByText("来源：当前选区")).toBeInTheDocument();
+  });
+
+  it("extracts manual explanations from non-streaming Responses output content", async () => {
+    vi.spyOn(window, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output: [
+          {
+            type: "message",
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify([
+                  {
+                    id: "manual-selected",
+                    term: "凸优化",
+                    body: "凸优化是在凸目标和凸约束下寻找全局最优解的优化问题。",
+                    source: "来源：当前选区"
+                  }
+                ])
+              }
+            ]
+          }
+        ]
+      })
+    } as Response);
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      toString: () => "凸优化"
+    } as Selection);
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.selectOptions(screen.getByLabelText("自定义兼容接口 API 格式"), "openai-responses");
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    await enterWorkspace(user);
+
+    fireEvent.contextMenu(screen.getByRole("article", { name: "回答正文" }), {
+      clientX: 420,
+      clientY: 300
+    });
+    await user.click(screen.getByRole("menuitem", { name: "为选区生成解释" }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "凸优化" })).toBeInTheDocument());
+    expect(screen.getByText("凸优化是在凸目标和凸约束下寻找全局最优解的优化问题。")).toBeInTheDocument();
+    expect(screen.queryByText("模型没有返回可用解释，请稍后重试")).not.toBeInTheDocument();
+  });
+
+  it("parses explanation JSON whose LaTeX body contains unescaped backslashes", async () => {
+    vi.spyOn(window, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content:
+                '[{"id":"manual-selected","term":"KL散度","body":"KL散度定义为 \\(D_{KL}(p \\| q)=\\sum_x p(x) \\log \\frac{p(x)}{q(x)}\\)。","source":"来源：当前选区","nested":[]}]'
+            }
+          }
+        ]
+      })
+    } as Response);
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      toString: () => "KL散度"
+    } as Selection);
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    await enterWorkspace(user);
+
+    fireEvent.contextMenu(screen.getByRole("article", { name: "回答正文" }), {
+      clientX: 420,
+      clientY: 300
+    });
+    await user.click(screen.getByRole("menuitem", { name: "为选区生成解释" }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "KL散度" })).toBeInTheDocument());
+    expect(screen.getByText(/KL散度定义为/)).toBeInTheDocument();
+    expect(document.querySelector(".explanation-card .inline-math .katex")).toBeInTheDocument();
   });
 
   it("keeps the manual explanation progress visible until the model returns", async () => {

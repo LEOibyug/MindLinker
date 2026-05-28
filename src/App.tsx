@@ -1127,17 +1127,57 @@ ${answerModePrompts[answerMode].instruction}
 const extractTextFromModelPayload = (payload: any) => {
   const responsesText = payload.output_text;
   const chatText = payload.choices?.[0]?.message?.content;
+  const collectContentText = (content: unknown): string => {
+    if (typeof content === "string") {
+      return content;
+    }
+    if (!Array.isArray(content)) {
+      return "";
+    }
+    return content
+      .map((part) => {
+        if (typeof part === "string") {
+          return part;
+        }
+        if (!part || typeof part !== "object") {
+          return "";
+        }
+        const record = part as { text?: unknown; content?: unknown; output_text?: unknown };
+        if (typeof record.text === "string") {
+          return record.text;
+        }
+        if (typeof record.output_text === "string") {
+          return record.output_text;
+        }
+        if (typeof record.content === "string") {
+          return record.content;
+        }
+        return "";
+      })
+      .join("")
+      .trim();
+  };
+  const responsesOutputText = Array.isArray(payload.output)
+    ? payload.output
+        .map((item: any) => collectContentText(item?.content))
+        .join("")
+        .trim()
+    : "";
+  const responseMessageText = collectContentText(payload.message?.content);
   if (typeof responsesText === "string" && responsesText.trim()) {
     return responsesText.trim();
+  }
+  if (responsesOutputText) {
+    return responsesOutputText;
+  }
+  if (responseMessageText) {
+    return responseMessageText;
   }
   if (typeof chatText === "string" && chatText.trim()) {
     return chatText.trim();
   }
   if (Array.isArray(chatText)) {
-    const joined = chatText
-      .map((part) => (typeof part?.text === "string" ? part.text : typeof part?.content === "string" ? part.content : ""))
-      .join("")
-      .trim();
+    const joined = collectContentText(chatText);
     if (joined) {
       return joined;
     }
@@ -1292,8 +1332,17 @@ const parseExplanationJson = (text: string, referenceState: string): Explanation
       : firstObjectStart !== -1 && lastObjectEnd > firstObjectStart
         ? candidateText.slice(firstObjectStart, lastObjectEnd + 1)
         : candidateText;
+  const escapeInvalidJsonBackslashes = (value: string) =>
+    value.replace(/\\(?=[A-Za-z()[\]|_{}^])/g, "\\\\");
+  const parseCandidate = (value: string) => {
+    try {
+      return JSON.parse(value) as ExplanationJsonItem[] | { explanations?: ExplanationJsonItem[] };
+    } catch {
+      return JSON.parse(escapeInvalidJsonBackslashes(value)) as ExplanationJsonItem[] | { explanations?: ExplanationJsonItem[] };
+    }
+  };
   try {
-    const parsed = JSON.parse(jsonText) as ExplanationJsonItem[] | { explanations?: ExplanationJsonItem[] };
+    const parsed = parseCandidate(jsonText);
     const items: ExplanationJsonItem[] = Array.isArray(parsed)
       ? parsed
       : Array.isArray(parsed.explanations)

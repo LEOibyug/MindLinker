@@ -12,6 +12,24 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-28 - Responses Text Extraction And LaTeX JSON Recovery
+
+- Investigated the latest runtime log for selected-text explanations and inline questions.
+- Root cause:
+  - OpenAI Responses non-streaming replies were returning text under `output[].content[].text`, while the shared extractor only read `output_text` and chat-completions fields.
+  - Some compatible providers returned explanation JSON with raw LaTeX backslashes such as `\(` and `\frac`, which made `JSON.parse` fail or corrupt formula text.
+- Fixed the shared model payload extractor so selected explanations, title generation, keyword extraction, and inline questions can read non-streaming Responses message content.
+- Added a tolerant explanation JSON parse fallback that protects LaTeX-style backslashes before retrying JSON parsing.
+- Regression coverage:
+  - selected-text explanations parse non-streaming Responses `output.content` payloads;
+  - inline question answers parse non-streaming Responses `output.content` payloads;
+  - explanation JSON with raw LaTeX backslashes parses and still renders formulas with KaTeX.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "non-streaming Responses output content|unescaped backslashes"`
+  - `npm test -- src/App.test.tsx -t "manual explanation|selected text|inline question|位置提问|Responses|runtime log|unescaped backslashes"`
+  - `npm test`
+  - `npm run build`
+
 ### 2026-05-28 - Selection Explanations And Inline Question Anchors
 
 - Fixed selected-text explanations created from inside an explanation card so the request includes the active explanation card body as local context.
