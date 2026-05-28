@@ -228,6 +228,7 @@ const readStoredInlineConversations = () =>
       anchorLength: typeof conversation.anchorLength === "number" ? conversation.anchorLength : undefined,
       anchorText: typeof conversation.anchorText === "string" ? conversation.anchorText : undefined,
       positionLabel: conversation.positionLabel ?? conversation.anchor,
+      title: typeof conversation.title === "string" ? conversation.title : undefined,
       messages:
         Array.isArray(conversation.messages) && conversation.messages.length > 0
           ? conversation.messages
@@ -1252,6 +1253,74 @@ ${referenceContext || "无"}
   return title;
 };
 
+const requestInlineConversationTitle = async (
+  conversation: InlineConversation,
+  provider: ProviderConfig,
+  model: ModelConfig
+) => {
+  const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+  const endpoint =
+    provider.apiFormat === "openai-responses"
+      ? `${baseUrl.endsWith("/responses") ? baseUrl : `${baseUrl}/responses`}`
+      : `${baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`}`;
+  const promptText = `${promptProtocolHeader}
+
+<task>位置问答标题生成任务</task>
+
+<instruction>
+请根据保存的位置问答内容，归纳一个 4 到 12 个字的标题，便于用户在汇总面板中识别。
+</instruction>
+
+<input>
+提问位置：
+${conversation.positionLabel}
+
+问答内容：
+${conversation.messages.map((message) => `${message.role === "user" ? "用户" : "回答"}：${message.content}`).join("\n")}
+</input>
+
+<output_format>
+- 只输出标题。
+- 标题长度为 4 到 12 个字。
+- 不要引号、解释、编号或标点。
+</output_format>
+
+<prohibitions>
+- 不要输出 Markdown、JSON 或多行内容。
+- 不要使用“位置问答”“新的问答”等占位词。
+</prohibitions>`;
+  appendRuntimeLog("model", "位置问答标题请求开始", {
+    provider: provider.name,
+    model: model.name,
+    apiFormat: provider.apiFormat,
+    endpoint,
+    conversationId: conversation.id
+  });
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: buildProviderHeaders(provider),
+    body: JSON.stringify(
+      provider.apiFormat === "openai-responses"
+        ? {
+            model: model.name,
+            input: promptText
+          }
+        : {
+            model: model.name,
+            messages: [{ role: "user", content: promptText }]
+          }
+    )
+  });
+  if (!response.ok) {
+    appendRuntimeLog("model", "位置问答标题请求失败", { status: response.status, statusText: response.statusText, conversationId: conversation.id }, "error");
+    throw new Error(`位置问答标题请求失败：${response.status} ${response.statusText}`);
+  }
+  const rawTitle = extractTextFromModelPayload(await response.json());
+  const title = sanitizeProjectTitle(rawTitle);
+  appendRuntimeLog("model", "位置问答标题模型原始回复", { rawTitle, title, conversationId: conversation.id });
+  return title;
+};
+
 const requestInlineQuestionAnswer = async (
   question: string,
   draft: ConversationDraft | null,
@@ -1371,6 +1440,7 @@ export function App() {
   const [runningConversationIds, setRunningConversationIds] = useState<string[]>([]);
   const [availableExplanations, setAvailableExplanations] = useState<Explanation[]>([]);
   const [explanationStack, setExplanationStack] = useState<Explanation[]>([]);
+  const [explanationPanelMode, setExplanationPanelMode] = useState<"chain" | "summary">("chain");
   const [inlineConversationDraft, setInlineConversationDraft] = useState<InlineConversationDraft>(null);
   const [inlineQuestionPending, setInlineQuestionPending] = useState(false);
   const [conversationExplanations, setConversationExplanationsState] = useState<Record<string, Explanation[]>>(() =>
@@ -2503,6 +2573,7 @@ export function App() {
       return;
     }
     setExplanationStack((stack) => [...stack.filter((item) => item.term !== term), explanation]);
+    setExplanationPanelMode("chain");
   };
 
   const previewExplanation = (term: string) => {
@@ -2513,6 +2584,16 @@ export function App() {
       }
       return [...stack.filter((item) => item.term !== term), target];
     });
+  };
+
+  const getInlineConversationTitle = (conversation: InlineConversation) =>
+    conversation.title?.trim() ||
+    conversation.question?.trim().slice(0, 18) ||
+    conversation.messages.find((message) => message.role === "user")?.content.trim().slice(0, 18) ||
+    conversation.anchor;
+
+  const openInlineConversationFromSummary = (conversation: InlineConversation) => {
+    openInlineConversation(conversation);
   };
 
   const openReaderMenu = (event: React.MouseEvent<HTMLElement>) => {
@@ -2537,6 +2618,7 @@ export function App() {
       : null;
     const selectedText = selectedTextFromRange || selectableElement?.dataset.selectableText?.trim() || "";
     const clickedElement = event.target instanceof HTMLElement ? event.target : rootElement;
+    const clickedBlock = clickedElement.closest<HTMLElement>("p, li, h1, h2, h3, .formula-block");
     const clickedRange = selectedText ? null : getCaretRangeFromPoint(event.clientX, event.clientY);
     const fullAnswerText = normalizePlainTextForAnchor(rootElement.textContent || activeDraft?.answerMarkdown || "");
     const anchorOffset = selectionRange
@@ -2545,8 +2627,10 @@ export function App() {
         ? getElementAnchorOffset(selectableElement, rootElement, selectedText)
         : clickedRange && rootElement.contains(clickedRange.startContainer)
           ? getRangeOffsetWithinElement(clickedRange, rootElement)
-          : getElementAnchorOffset(clickedElement, rootElement, clickedElement.textContent || "");
-    const anchorText = selectedText || normalizePlainTextForAnchor(clickedElement.textContent || "").slice(0, 18) || "当前位置";
+          : clickedBlock
+            ? getElementAnchorOffset(clickedBlock, rootElement, clickedBlock.textContent || "")
+            : getElementAnchorOffset(clickedElement, rootElement, clickedElement.textContent || "");
+    const anchorText = selectedText || normalizePlainTextForAnchor((clickedBlock ?? clickedElement).textContent || "").slice(0, 18) || "当前位置";
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
@@ -2856,6 +2940,11 @@ export function App() {
   };
 
   const openInlineConversation = (conversation: InlineConversation) => {
+    setViewMode("reader");
+    window.requestAnimationFrame(() => {
+      const marker = document.querySelector<HTMLElement>(`[data-inline-conversation-id="${conversation.id}"]`);
+      marker?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
     setInlineConversationDraft({
       id: conversation.id,
       anchor: conversation.anchor,
@@ -2936,6 +3025,7 @@ export function App() {
       anchorLength: inlineConversationDraft.anchorLength,
       anchorText: inlineConversationDraft.anchorText,
       positionLabel: inlineConversationDraft.positionLabel,
+      title: undefined,
       question: inlineConversationDraft.messages.find((message) => message.role === "user")?.content ?? "",
       answer: inlineConversationDraft.messages.find((message) => message.role === "assistant")?.content ?? "",
       messages: inlineConversationDraft.messages,
@@ -2945,6 +3035,22 @@ export function App() {
     setInlineConversationDraft(null);
     setInlineQuestionPending(false);
     setNotice("已保存当前位置的小对话");
+    const chatConfig = findChatModelConfig(customProviders, activeProviderId);
+    if (chatConfig) {
+      void requestInlineConversationTitle(conversation, chatConfig.provider, chatConfig.model)
+        .then((title) => {
+          if (!title) {
+            return;
+          }
+          setInlineConversations((conversations) =>
+            conversations.map((item) => (item.id === conversation.id ? { ...item, title } : item))
+          );
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          logDebugMessage(message);
+        });
+    }
   };
 
   const introduceReference = () => {
@@ -3879,6 +3985,22 @@ export function App() {
             <Network aria-hidden="true" size={17} />
             <h2>解释链</h2>
           </div>
+          <div className="panel-segmented-control" role="group" aria-label="解释面板视图">
+            <button
+              className={explanationPanelMode === "chain" ? "active" : ""}
+              type="button"
+              onClick={() => setExplanationPanelMode("chain")}
+            >
+              解释
+            </button>
+            <button
+              className={explanationPanelMode === "summary" ? "active" : ""}
+              type="button"
+              onClick={() => setExplanationPanelMode("summary")}
+            >
+              汇总
+            </button>
+          </div>
           {renderManualExplanationProgress()}
           {generationPhase === "annotations" ? (
             <div className="chain-sync" role="status" aria-label="解释链生成中">
@@ -3907,41 +4029,87 @@ export function App() {
             </section>
           ) : null}
 
-          <div className="explanation-stack" aria-label="解释卡片堆叠">
-            {visibleStack.map((explanation, index) =>
-              index === 0 ? (
-                <article
-                  className="explanation-card active-card"
-                  data-explanation-term={explanation.term}
-                  key={explanation.term}
-                  onContextMenu={openReaderMenu}
-                >
-                  <p className="eyebrow">最新解释</p>
-                  <h2>{explanation.term}</h2>
-                  <div className="explanation-body">
-                    {renderAnswerText(
-                      explanation.body,
-                      getExplanationBodyTerms(explanation.body, explanation.term),
-                      true,
-                      openExplanation
-                    )}
-                  </div>
-                  <div className="source-box">{explanation.source}</div>
-                </article>
-              ) : (
-                <button
-                  className="stacked-card-preview"
-                  key={explanation.term}
-                  type="button"
-                  aria-label={`回看 ${explanation.term}`}
-                  onClick={() => previewExplanation(explanation.term)}
-                >
-                  <span>{explanation.term}</span>
-                  <small>{explanation.source}</small>
-                </button>
-              )
-            )}
-          </div>
+          {explanationPanelMode === "summary" ? (
+            <section className="summary-panel" role="region" aria-label="汇总面板">
+              <div className="summary-section">
+                <h3>解释项</h3>
+                {activeConversationExplanations.length > 0 ? (
+                  activeConversationExplanations.map((explanation) => (
+                    <button
+                      className="summary-item"
+                      key={explanation.id ?? explanation.term}
+                      type="button"
+                      aria-label={`解释项 ${explanation.term}`}
+                      onClick={() => openExplanation(explanation.term)}
+                    >
+                      <strong>{explanation.term}</strong>
+                      <span>{explanation.source}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="empty-sidebar-note">暂无解释项</p>
+                )}
+              </div>
+              <div className="summary-section">
+                <h3>问答</h3>
+                {activeInlineConversations.length > 0 ? (
+                  activeInlineConversations.map((conversation) => {
+                    const title = getInlineConversationTitle(conversation);
+                    return (
+                      <button
+                        className="summary-item"
+                        key={conversation.id}
+                        type="button"
+                        aria-label={`问答 ${title}`}
+                        onClick={() => openInlineConversationFromSummary(conversation)}
+                      >
+                        <strong>{title}</strong>
+                        <span>{conversation.positionLabel}</span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="empty-sidebar-note">暂无位置问答</p>
+                )}
+              </div>
+            </section>
+          ) : (
+            <div className="explanation-stack" aria-label="解释卡片堆叠">
+              {visibleStack.map((explanation, index) =>
+                index === 0 ? (
+                  <article
+                    className="explanation-card active-card"
+                    data-explanation-term={explanation.term}
+                    key={explanation.term}
+                    onContextMenu={openReaderMenu}
+                  >
+                    <p className="eyebrow">最新解释</p>
+                    <h2>{explanation.term}</h2>
+                    <div className="explanation-body">
+                      {renderAnswerText(
+                        explanation.body,
+                        getExplanationBodyTerms(explanation.body, explanation.term),
+                        true,
+                        openExplanation
+                      )}
+                    </div>
+                    <div className="source-box">{explanation.source}</div>
+                  </article>
+                ) : (
+                  <button
+                    className="stacked-card-preview"
+                    key={explanation.term}
+                    type="button"
+                    aria-label={`回看 ${explanation.term}`}
+                    onClick={() => previewExplanation(explanation.term)}
+                  >
+                    <span>{explanation.term}</span>
+                    <small>{explanation.source}</small>
+                  </button>
+                )
+              )}
+            </div>
+          )}
         </aside>
       </div>
 

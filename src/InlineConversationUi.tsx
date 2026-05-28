@@ -35,6 +35,7 @@ export const renderInlineConversationMarker = (
     type="button"
     key={key ?? conversation.id}
     aria-label={`查看位置提问 ${index + 1}`}
+    data-inline-conversation-id={conversation.id}
     onClick={() => onOpen(conversation)}
   >
     <MessageSquarePlus aria-hidden="true" size={compact ? 13 : 14} />

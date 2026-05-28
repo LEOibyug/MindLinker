@@ -12,6 +12,7 @@ export type InlineConversation = {
   anchorLength?: number;
   anchorText?: string;
   positionLabel: string;
+  title?: string;
   question?: string;
   answer?: string;
   messages: InlineConversationMessage[];

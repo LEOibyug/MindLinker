@@ -1610,6 +1610,31 @@ describe("MindLinker shell", () => {
     expect(screen.getByText(/就越大/).closest("strong")).toBeInTheDocument();
   });
 
+  it("renders explanation links inside markdown headings", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await configureMockChatApi(
+      user,
+      "## 互信息与信道容量\n\n正文继续。",
+      JSON.stringify([
+        {
+          id: "mutual-information",
+          term: "互信息",
+          body: "互信息衡量两个随机变量共享的信息量。",
+          source: "来源：当前回答"
+        }
+      ])
+    );
+
+    await user.type(screen.getByLabelText("学习问题"), "讲互信息");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await startExplanationGeneration(user);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "解释 互信息" })).toHaveClass("revealed"));
+    const heading = screen.getByRole("heading", { name: /互信息\s*与信道容量/ });
+    expect(within(heading).getByRole("button", { name: "解释 互信息" })).toBeInTheDocument();
+  });
+
   it("reveals explanation links by the original marker ids even when explanation terms differ", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();
@@ -2182,6 +2207,43 @@ describe("MindLinker shell", () => {
     expect(screen.getByRole("dialog", { name: "在此处提问" }).querySelector(".inline-math .katex")).toBeInTheDocument();
   });
 
+  it("uses the model to title saved inline questions", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
+      const body = String(init?.body ?? "");
+      if (body.includes("位置问答标题生成任务")) {
+        return {
+          ok: true,
+          json: async () => ({ choices: [{ message: { content: "典型集追问" } }] })
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: "这是位置问答回答。" } }] })
+      } as Response;
+    });
+    renderWithSeededProjects();
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    await enterWorkspace(user);
+
+    fireEvent.contextMenu(screen.getByRole("article", { name: "回答正文" }), {
+      clientX: 320,
+      clientY: 240
+    });
+    await user.click(screen.getByRole("menuitem", { name: "在此处提问" }));
+    await user.type(screen.getByLabelText("当前位置提问"), "这里为什么这样做？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await screen.findByText("这是位置问答回答。");
+    await user.click(screen.getByRole("button", { name: "保存提问" }));
+    await user.click(screen.getByRole("button", { name: "汇总" }));
+
+    expect(screen.getByRole("button", { name: "问答 典型集追问" })).toBeInTheDocument();
+  });
+
   it("extracts inline question answers from non-streaming Responses output content", async () => {
     const user = userEvent.setup();
     vi.spyOn(window, "fetch").mockResolvedValue({
@@ -2402,6 +2464,81 @@ describe("MindLinker shell", () => {
 
     expect(within(firstItem).getAllByRole("button", { name: /查看位置提问/ })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: /查看位置提问/ })).toHaveLength(2);
+  });
+
+  it("shows explanations and titled inline questions in the summary panel", async () => {
+    const user = userEvent.setup();
+    seedExistingProjects();
+    window.localStorage.setItem(
+      "mindlinker.conversationDrafts",
+      JSON.stringify({
+        "cross-entropy": {
+          title: "互信息学习",
+          prompt: "解释互信息",
+          answerMode: "balanced",
+          referenceMode: "direct",
+          referenceTitles: [],
+          referenceContext: "",
+          openAIInputPreview: "",
+          answerMarkdown: "互信息衡量随机变量之间共享的信息。",
+          modelStatus: "generated",
+          generated: true,
+          explanationTerms: []
+        }
+      })
+    );
+    window.localStorage.setItem(
+      "mindlinker.conversationExplanations",
+      JSON.stringify({
+        "cross-entropy": [
+          {
+            id: "term-mutual-information",
+            term: "互信息",
+            body: "互信息是共享信息量。",
+            source: "来源：当前回答",
+            referenceState: "refs:empty"
+          }
+        ]
+      })
+    );
+    window.localStorage.setItem(
+      "mindlinker.inlineConversations",
+      JSON.stringify([
+        {
+          id: "inline-mutual-info",
+          projectId: "loss-functions",
+          conversationId: "cross-entropy",
+          title: "共享信息追问",
+          anchor: "当前位置",
+          anchorOffset: 6,
+          positionLabel: "位置：第 7 个字符附近",
+          question: "这里的共享是什么意思？",
+          answer: "指两个变量共同减少的不确定性。",
+          messages: [
+            { role: "user", content: "这里的共享是什么意思？" },
+            { role: "assistant", content: "指两个变量共同减少的不确定性。" }
+          ],
+          saved: true
+        }
+      ])
+    );
+    render(<App />);
+    await enterWorkspace(user);
+
+    await user.click(screen.getByRole("button", { name: "汇总" }));
+
+    const summary = screen.getByRole("region", { name: "汇总面板" });
+    expect(within(summary).getByRole("button", { name: "解释项 互信息" })).toBeInTheDocument();
+    expect(within(summary).getByRole("button", { name: "问答 共享信息追问" })).toBeInTheDocument();
+
+    await user.click(within(summary).getByRole("button", { name: "解释项 互信息" }));
+    expect(screen.getByRole("heading", { name: "互信息" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "汇总" }));
+    const refreshedSummary = screen.getByRole("region", { name: "汇总面板" });
+    await user.click(within(refreshedSummary).getByRole("button", { name: "问答 共享信息追问" }));
+    expect(screen.getByRole("dialog", { name: "在此处提问" })).toBeInTheDocument();
+    expect(screen.getByText("这里的共享是什么意思？")).toBeInTheDocument();
   });
 
   it("saves a marker for a right-click position even when no text is selected", async () => {

@@ -466,6 +466,34 @@ button {
   margin-bottom: 12px;
 }
 
+.panel-segmented-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border: 1px solid #d8e0ed;
+  border-radius: 8px;
+  background: #f3f6fb;
+}
+
+.panel-segmented-control button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #59657a;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.panel-segmented-control button.active {
+  background: #fff;
+  color: #1458d4;
+  box-shadow: 0 1px 5px rgba(42, 59, 92, .12);
+}
+
 h1,
 h2,
 h3,
@@ -2208,6 +2236,63 @@ h3 {
   margin-top: 4px;
   min-width: 0;
   max-width: 100%;
+}
+
+.summary-panel {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.summary-section {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.summary-section h3 {
+  margin: 0;
+  font-size: 13px;
+  color: #59657a;
+}
+
+.summary-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #d8e0ed;
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.summary-item:hover {
+  border-color: #9db6e4;
+  background: #f7faff;
+}
+
+.summary-item strong,
+.summary-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-item strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.summary-item span {
+  color: #68758c;
+  font-size: 12px;
 }
 
 .explanation-impact-panel {

@@ -12,6 +12,27 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Explanation Panel Summary
+
+- Added an "解释 / 汇总" switch to the explanation panel.
+- The summary view now lists:
+  - all explanation items for the current conversation;
+  - all saved inline position questions for the current conversation.
+- Clicking a summary explanation opens its explanation card.
+- Clicking a summary question switches back to the reader, scrolls toward the saved marker when present, and opens the inline question dialog.
+- Saved inline questions now request a short model-generated title; if title generation is unavailable, the first user question remains the fallback title.
+- Fixed explanation links inside Markdown headings so concepts in large/bold heading blocks are clickable like concepts in paragraphs.
+- Improved empty-selection right-click anchoring by falling back to the clicked paragraph/list item/heading/formula block instead of arbitrary inner text.
+- Regression coverage:
+  - heading concepts render as explanation links;
+  - summary panel lists explanations and titled questions;
+  - saved inline questions can receive model-generated titles;
+  - position question markers still render once per line.
+- Verification:
+  - `npm test -- --run src/App.test.tsx -t "markdown headings|summary panel|model to title saved inline questions|right-click position|position question markers"`
+  - `npm test -- --run src/App.test.tsx`
+  - `npm run build`
+
 ### 2026-05-29 - Home Reference Append Imports
 
 - Fixed the home reference file picker so importing files multiple times appends to the pending reference list instead of replacing earlier files.

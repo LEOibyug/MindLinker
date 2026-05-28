@@ -553,7 +553,15 @@ export const renderAnswerText = (
         const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
         if (headingMatch) {
           const level = headingMatch[1].length;
-          const content = renderInlineMarkdown(headingMatch[2]);
+          const content = renderInlineAnswerWithTerms(
+            headingMatch[2],
+            textBoundTerms,
+            annotationsRevealed,
+            openExplanation,
+            lineMarkers,
+            openInlineConversation,
+            renderInlineConversationMarker
+          );
           if (level === 1) {
             elements.push(<h1 key={`h1-${elements.length}`}>{content}</h1>);
             return;
