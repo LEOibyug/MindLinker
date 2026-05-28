@@ -4,7 +4,6 @@ import {
   Highlighter,
   FilePlus2,
   GitBranch,
-  KeyRound,
   Loader2,
   MessageSquarePlus,
   Network,
@@ -35,7 +34,7 @@ import {
   providerConfigs,
   referenceChangePlans,
 } from "./domain";
-import type { LearningProject, ModelConfig, ProviderApiFormat, ProviderConfig, VectorStore } from "./domain";
+import type { LearningProject, ModelConfig, ProviderConfig, VectorStore } from "./domain";
 import type { ConversationKnowledgeGraph } from "./domain";
 import type { Explanation } from "./explanations";
 import { bindExplanationsToAnswerText, bindExplanationsToMarkedTerms, getExplanationAnchorTerm, normalizeTermForMatch } from "./explanations";
@@ -59,7 +58,9 @@ import {
 import { parseReferenceFile } from "./pdfReferences";
 import type { ParsedReferenceDocument } from "./pdfReferences";
 import { appendRuntimeLog } from "./runtimeLog";
+import { SettingsPage } from "./SettingsPage";
 import { normalizePlainTextForAnchor } from "./textAnchors";
+import { VectorStoreDialog } from "./VectorStoreDialog";
 import {
   chunkMarkedTerms,
   getVisiblePartialMarkedAnswer,
@@ -1968,224 +1969,30 @@ export function App() {
       </div>
     ) : null;
 
-
   const renderSettingsPage = () => (
-
-        <div className="settings-page-backdrop" role="presentation">
-          <section className="settings-page" role="main" aria-label="设置">
-            <header className="settings-page-header">
-              <div>
-                <h2>设置</h2>
-                <p>模型与本地数据</p>
-              </div>
-              <button
-                className="icon-text-button"
-                type="button"
-                aria-label="返回"
-                onClick={() => {
-                  setSettingsOpen(false);
-                  setAppView(settingsReturnView);
-                }}
-              >
-                <X aria-hidden="true" size={18} />
-                返回
-              </button>
-            </header>
-            <div className="settings-layout">
-              <section className="settings-main-panel" aria-label="模型供应商">
-                <div className="active-provider-panel">
-                  <label className="settings-field">
-                    <span>当前使用供应商</span>
-                    <select
-                      aria-label="当前使用供应商"
-                      value={activeProviderId}
-                      onChange={(event) => setActiveProviderId(event.target.value)}
-                    >
-                      {customProviders.map((provider) => (
-                        <option key={provider.id} value={provider.id}>
-                          {provider.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <small>回答、关键词抽取、解释和重写都会优先使用当前供应商的主模型。</small>
-                </div>
-                <aside className="vision-model-hint" aria-label="视觉模型提示">
-                  <strong>请使用带有视觉能力的模型</strong>
-                  <p>
-                    PDF 页面图片、截图、扫描内容和复杂排版会作为图像上下文参与生成。推荐优先填写
-                    <code>gpt5.5</code>
-                    或
-                    <code>gpt5.4</code>
-                    ，也可以使用供应商提供的其他视觉模型。
-                  </p>
-                </aside>
-                <div className="settings-section-title">
-                  <div>
-                    <h3>供应商</h3>
-                    <p>配置用于生成回答、解释和重写的主模型。</p>
-                  </div>
-                  <button className="ghost-button" type="button" onClick={addProvider}>
-                    <Plus aria-hidden="true" size={15} />
-                    添加自定义供应商
-                  </button>
-                </div>
-                <div className="provider-list">
-                  {customProviders.map((provider) => (
-                    <article className="provider-card" key={provider.id}>
-                      <div className="provider-card-header">
-                        <strong>{provider.name}</strong>
-                        <div className="provider-card-actions">
-                          <button
-                            className="mini-action-button"
-                            type="button"
-                            aria-label={`测试供应商 ${provider.name}`}
-                            onClick={() => void testProviderConnection(provider)}
-                          >
-                            测试
-                          </button>
-                          <button className="mini-icon-button" type="button" aria-label={`删除供应商 ${provider.name}`} onClick={() => deleteProvider(provider.id)}>
-                            <Trash2 aria-hidden="true" size={14} />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="settings-grid">
-                        <label className="settings-field">
-                          <span>名称</span>
-                          <input
-                            aria-label={`供应商 ${provider.id} 名称`}
-                            value={provider.name}
-                            onChange={(event) => updateProvider(provider.id, "name", event.target.value)}
-                          />
-                        </label>
-                        <label className="settings-field">
-                          <span>Base URL</span>
-                          <input
-                            aria-label={`供应商 ${provider.id} Base URL`}
-                            value={provider.baseUrl}
-                            onChange={(event) => updateProvider(provider.id, "baseUrl", event.target.value)}
-                          />
-                        </label>
-                      </div>
-                      <div className="settings-grid">
-                        <label className="provider-format-field">
-                          <span>API 格式</span>
-                          <select
-                            aria-label={`${provider.name} API 格式`}
-                            value={provider.apiFormat ?? "openai-compatible"}
-                            onChange={(event) => updateProvider(provider.id, "apiFormat", event.target.value as ProviderApiFormat)}
-                          >
-                            <option value="openai-compatible">OpenAI 兼容 Chat Completions</option>
-                            <option value="openai-responses">OpenAI Responses</option>
-                          </select>
-                        </label>
-                        <label className="settings-field">
-                          <span>API Key</span>
-                          <div className="settings-input-row">
-                            <KeyRound aria-hidden="true" size={16} />
-                            <input
-                              aria-label={`${provider.name} API Key`}
-                              type="password"
-                              value={provider.apiKey ?? ""}
-                              onChange={(event) => updateProvider(provider.id, "apiKey", event.target.value)}
-                              placeholder={provider.apiKeyLabel}
-                            />
-                          </div>
-                        </label>
-                      </div>
-                      <small>
-                        {(provider.apiFormat ?? "openai-compatible") === "openai-responses"
-                          ? "Responses API 使用 /responses 请求结构"
-                          : "兼容格式使用 /chat/completions 请求结构"}
-                      </small>
-                      <section className="provider-models" aria-label={`${provider.name} 模型列表`}>
-                        <div className="provider-models-header">
-                          <strong>主模型</strong>
-                          <button
-                            className="mini-action-button"
-                            type="button"
-                            aria-label={`为 ${provider.name} 添加模型`}
-                            onClick={() => addProviderModel(provider.id)}
-                          >
-                            <Plus aria-hidden="true" size={14} />
-                            添加模型
-                          </button>
-                        </div>
-                        {provider.models.map((model) => (
-                          <article className="provider-model-row" key={model.id}>
-                            <input
-                              aria-label={`模型 ${model.id} 名称`}
-                              value={model.name}
-                              onChange={(event) => updateProviderModel(provider.id, model.id, event.target.value)}
-                            />
-                            <span className="model-role-badge">主模型</span>
-                            <button
-                              className="mini-action-button"
-                              type="button"
-                              aria-label={`测试模型 ${model.name}`}
-                              onClick={() => void testProviderModel(provider, model)}
-                            >
-                              测试
-                            </button>
-                            <button
-                              className="mini-icon-button"
-                              type="button"
-                              aria-label={`删除模型 ${model.name}`}
-                              onClick={() => deleteProviderModel(provider.id, model.id)}
-                            >
-                              <Trash2 aria-hidden="true" size={14} />
-                            </button>
-                          </article>
-                        ))}
-                      </section>
-                    </article>
-                  ))}
-                </div>
-              </section>
-              <aside className="settings-side-panel" aria-label="RAG 设置">
-                <section className="rag-config-panel">
-                  <div>
-                    <h3>RAG</h3>
-                    <span>{ragEnabled ? "已开启" : "未开启"}</span>
-                  </div>
-                  <label className="toggle-field">
-                    <input
-                      aria-label="开启 RAG"
-                      checked={ragEnabled}
-                      type="checkbox"
-                      onChange={(event) => setRagEnabled(event.target.checked)}
-                    />
-                    <span>在回答、解释和重写中检索本地参考片段</span>
-                  </label>
-                  <label className="settings-field">
-                    <span>嵌入模型名称</span>
-                    <input aria-label="RAG Embedding 模型" defaultValue="embedding-model" />
-                  </label>
-                  <label className="settings-field">
-                    <span>向量化 API 接口</span>
-                    <input
-                      aria-label="向量化 API 接口"
-                      value={embeddingEndpoint}
-                      onChange={(event) => setEmbeddingEndpoint(event.target.value)}
-                      placeholder="https://api.example.com/v1/embeddings"
-                    />
-                  </label>
-                  <label className="settings-field">
-                    <span>向量化 API Key</span>
-                    <input
-                      aria-label="向量化 API Key"
-                      type="password"
-                      value={embeddingApiKey}
-                      onChange={(event) => setEmbeddingApiKey(event.target.value)}
-                      placeholder="用于生成本地向量索引"
-                    />
-                  </label>
-                </section>
-              </aside>
-            </div>
-          </section>
-        </div>
-      
+    <SettingsPage
+      activeProviderId={activeProviderId}
+      embeddingApiKey={embeddingApiKey}
+      embeddingEndpoint={embeddingEndpoint}
+      providers={customProviders}
+      ragEnabled={ragEnabled}
+      onAddProvider={addProvider}
+      onAddProviderModel={addProviderModel}
+      onBack={() => {
+        setSettingsOpen(false);
+        setAppView(settingsReturnView);
+      }}
+      onDeleteProvider={deleteProvider}
+      onDeleteProviderModel={deleteProviderModel}
+      onSetActiveProvider={setActiveProviderId}
+      onSetEmbeddingApiKey={setEmbeddingApiKey}
+      onSetEmbeddingEndpoint={setEmbeddingEndpoint}
+      onSetRagEnabled={setRagEnabled}
+      onTestProvider={(provider) => void testProviderConnection(provider)}
+      onTestProviderModel={(provider, model) => void testProviderModel(provider, model)}
+      onUpdateProvider={updateProvider}
+      onUpdateProviderModel={updateProviderModel}
+    />
   );
 
   if (appView === "home") {
@@ -2890,53 +2697,14 @@ export function App() {
       ) : null}
 
       {vectorStoreOpen ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="vector-store-dialog" role="dialog" aria-modal="true" aria-label="本地向量库">
-            <header>
-              <div>
-                <h2>本地向量库</h2>
-                <p>{ragEnabled ? "RAG 已开启" : "RAG 未开启"} · {localVectorStores.length} 个索引</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="关闭向量库" onClick={() => setVectorStoreOpen(false)}>
-                <X aria-hidden="true" size={18} />
-              </button>
-            </header>
-            <section className="vector-store-summary">
-              <article>
-                <strong>{localVectorStores.reduce((total, store) => total + store.chunkCount, 0)}</strong>
-                <span>片段</span>
-              </article>
-              <article>
-                <strong>{localVectorStores.reduce((total, store) => total + store.sizeMb, 0).toFixed(1)} MB</strong>
-                <span>本地占用</span>
-              </article>
-              <article>
-                <strong>{projectVectorStores.length}</strong>
-                <span>当前项目索引</span>
-              </article>
-            </section>
-            <div className="vector-store-toolbar">
-              <button className="primary-button" type="button" onClick={rebuildActiveVectorStore}>
-                重建当前项目索引
-              </button>
-            </div>
-            <section className="vector-store-list" aria-label="向量库列表">
-              {localVectorStores.map((store) => (
-                <article className="vector-store-card" key={store.id}>
-                  <div>
-                    <strong>{store.name}</strong>
-                    <span>{store.chunkCount} chunks · {store.sizeMb.toFixed(1)} MB · {store.updatedAt}</span>
-                    <small>{store.embeddingModelId} · {store.embeddingEndpoint}</small>
-                  </div>
-                  <button className="ghost-button" type="button" aria-label={`清理向量库 ${store.name}`} onClick={() => clearVectorStore(store.id)}>
-                    <Trash2 aria-hidden="true" size={15} />
-                    清理
-                  </button>
-                </article>
-              ))}
-            </section>
-          </section>
-        </div>
+        <VectorStoreDialog
+          projectVectorStores={projectVectorStores}
+          ragEnabled={ragEnabled}
+          stores={localVectorStores}
+          onClearStore={clearVectorStore}
+          onClose={() => setVectorStoreOpen(false)}
+          onRebuildActiveStore={rebuildActiveVectorStore}
+        />
       ) : null}
     </div>
   );

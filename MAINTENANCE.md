@@ -12,6 +12,20 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Settings And Vector Store UI Refactor
+
+- Extracted settings UI from `App.tsx` into `SettingsPage.tsx`.
+- Extracted local vector-store management dialog from `App.tsx` into `VectorStoreDialog.tsx`.
+- Kept the existing UI copy, aria labels, provider/RAG interactions, and vector-store actions stable.
+- Added component-level tests for:
+  - provider format changes, RAG toggling, visual-model hint, and model test callbacks;
+  - vector-store totals, cleanup, rebuild, and close callbacks.
+- Reduced `App.tsx` from roughly 2,943 lines to roughly 2,711 lines.
+- Verification:
+  - `npm test -- --run src/SettingsPage.test.tsx src/VectorStoreDialog.test.tsx`
+  - `npm test`
+  - `npm run build`
+
 ### 2026-05-29 - App Module Boundary Refactor
 
 - Continued reducing `App.tsx` by extracting non-UI responsibilities into focused modules:
