@@ -2300,6 +2300,86 @@ describe("MindLinker shell", () => {
     expect(paragraph.textContent).toContain("严格凸函数有严格凸条件");
   });
 
+  it("renders position question markers once at the end of a line with repeated explanation links", async () => {
+    const user = userEvent.setup();
+    seedExistingProjects();
+    window.localStorage.setItem(
+      "mindlinker.conversationDrafts",
+      JSON.stringify({
+        "cross-entropy": {
+          title: "典型集译码",
+          prompt: "解释典型集",
+          answerMode: "balanced",
+          referenceMode: "direct",
+          referenceTitles: [],
+          referenceContext: "",
+          openAIInputPreview: "",
+          answerMarkdown: "- 若序列属于典型集：前缀加 1，再发送其在典型集中的索引；\n- 若序列不属于典型集：前缀加 0，直接原样发送。",
+          modelStatus: "generated",
+          generated: true,
+          explanationTerms: []
+        }
+      })
+    );
+    window.localStorage.setItem(
+      "mindlinker.conversationExplanations",
+      JSON.stringify({
+        "cross-entropy": [
+          {
+            id: "term-typical-set",
+            term: "典型集",
+            body: "典型集是信息论中的高概率序列集合。",
+            source: "来源：当前参考",
+            referenceState: "refs:empty"
+          }
+        ]
+      })
+    );
+    window.localStorage.setItem(
+      "mindlinker.inlineConversations",
+      JSON.stringify([
+        {
+          id: "inline-typical-line",
+          projectId: "loss-functions",
+          conversationId: "cross-entropy",
+          anchor: "当前位置",
+          anchorOffset: 4,
+          positionLabel: "位置：第 5 个字符附近",
+          question: "这里为什么要判断典型集？",
+          answer: "因为编码方案会按是否属于典型集分支。",
+          messages: [
+            { role: "user", content: "这里为什么要判断典型集？" },
+            { role: "assistant", content: "因为编码方案会按是否属于典型集分支。" }
+          ],
+          saved: true
+        },
+        {
+          id: "inline-typical-line-second",
+          projectId: "loss-functions",
+          conversationId: "cross-entropy",
+          anchor: "当前位置",
+          anchorOffset: 18,
+          positionLabel: "位置：第 19 个字符附近",
+          question: "这里的索引怎么理解？",
+          answer: "索引是在典型集内部的编号。",
+          messages: [
+            { role: "user", content: "这里的索引怎么理解？" },
+            { role: "assistant", content: "索引是在典型集内部的编号。" }
+          ],
+          saved: true
+        }
+      ])
+    );
+    render(<App />);
+    await enterWorkspace(user);
+
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "解释 典型集" }).length).toBeGreaterThanOrEqual(2));
+    const firstItem = screen.getByText(/若序列属于/).closest("li")!;
+
+    expect(within(firstItem).getAllByRole("button", { name: /查看位置提问/ })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /查看位置提问/ })).toHaveLength(2);
+  });
+
   it("saves a marker for a right-click position even when no text is selected", async () => {
     const user = userEvent.setup();
     seedExistingProjects();

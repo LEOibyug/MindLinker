@@ -12,6 +12,22 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Line-End Inline Question Markers
+
+- Fixed a rendering bug where one saved position question could appear multiple times on the same line when the line contained repeated explanation links.
+- New position-based inline question markers now render once at the end of the matched line instead of being injected into every split text fragment.
+- Multiple saved questions on the same line render as multiple compact markers at that line end.
+- Legacy selection-text markers still render beside their selected text for backward compatibility.
+- Regression coverage:
+  - repeated explanation links no longer duplicate a position-question marker;
+  - multiple questions on one line appear as multiple line-end markers;
+  - existing selected-text markers, saved inline questions, explanation links, formulas, and manual explanations remain stable.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "renders position question markers once|anchors saved inline question markers|saves a marker for a right-click position|asks and saves an inline question"`
+  - `npm test -- src/App.test.tsx -t "inline question|位置提问|saved inline question|manual explanation|selected text|formula|math|marker|markers|explanation links"`
+  - `npm test`
+  - `npm run build`
+
 ### 2026-05-29 - Home Reference Removal
 
 - Added a remove button to each reference attached on the home screen before a project is created.

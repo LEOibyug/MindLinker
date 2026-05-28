@@ -674,6 +674,14 @@ h3 {
   vertical-align: middle;
 }
 
+.line-end-question-markers {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
 .inline-question-marker:hover {
   border-color: #9db9ee;
   background: #eef5ff;

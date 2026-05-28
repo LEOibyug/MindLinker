@@ -2050,7 +2050,6 @@ const renderInlineAnswerWithTerms = (
   inlineConversationMarkers: InlineConversationMarkerBinding[] = [],
   openInlineConversation: (conversation: InlineConversation) => void = () => {}
 ) => {
-  const positionalMarkers = inlineConversationMarkers.filter((marker) => typeof marker.offset === "number");
   const sortedInlineMarkers = inlineConversationMarkers
     .filter((marker) => typeof marker.offset !== "number" && marker.anchorText && text.includes(marker.anchorText))
     .sort((a, b) => b.anchorText.length - a.anchorText.length);
@@ -2058,40 +2057,6 @@ const renderInlineAnswerWithTerms = (
     sortedInlineMarkers.length > 0
       ? new RegExp(`(${sortedInlineMarkers.map((marker) => escapeRegExp(marker.anchorText)).join("|")})`, "g")
       : null;
-  const renderInlineMarkdownWithPositionMarkers = (value: string, keyPrefix: string) => {
-    if (positionalMarkers.length === 0) {
-      return renderInlineMarkdown(value);
-    }
-    const markersByOffset = new Map<number, InlineConversationMarkerBinding[]>();
-    positionalMarkers.forEach((marker) => {
-      const offset = Math.max(0, Math.min(value.length, marker.offset ?? 0));
-      markersByOffset.set(offset, [...(markersByOffset.get(offset) ?? []), marker]);
-    });
-    const offsets = [...markersByOffset.keys()].sort((a, b) => a - b);
-    const nodes: ReactNode[] = [];
-    let cursor = 0;
-    offsets.forEach((offset, offsetIndex) => {
-      if (offset > cursor) {
-        nodes.push(<Fragment key={`${keyPrefix}-pos-text-${offsetIndex}`}>{renderInlineMarkdown(value.slice(cursor, offset))}</Fragment>);
-      }
-      markersByOffset.get(offset)?.forEach((marker, markerIndex) => {
-        nodes.push(
-          renderInlineConversationMarker(
-            marker.conversation,
-            marker.index,
-            openInlineConversation,
-            true,
-            `${keyPrefix}-pos-${offsetIndex}-${markerIndex}-${marker.conversation.id}`
-          )
-        );
-      });
-      cursor = offset;
-    });
-    if (cursor < value.length) {
-      nodes.push(<Fragment key={`${keyPrefix}-pos-tail`}>{renderInlineMarkdown(value.slice(cursor))}</Fragment>);
-    }
-    return nodes;
-  };
   const renderMarker = (part: string, keyPrefix: string) => {
     const marker = sortedInlineMarkers.find((item) => item.anchorText === part);
     return marker
@@ -2100,13 +2065,13 @@ const renderInlineAnswerWithTerms = (
   };
   const renderInlineMarkdownWithMarkers = (value: string, keyPrefix: string) => {
     if (!markerMatcher) {
-      return renderInlineMarkdownWithPositionMarkers(value, keyPrefix);
+      return renderInlineMarkdown(value);
     }
     return (
       <>
         {value.split(markerMatcher).map((part, index) => (
           <Fragment key={`${keyPrefix}-inline-marker-${index}-${part}`}>
-            {renderInlineMarkdownWithPositionMarkers(part, `${keyPrefix}-${index}`)}
+            {renderInlineMarkdown(part)}
             {renderMarker(part, `${keyPrefix}-${index}`)}
           </Fragment>
         ))}
@@ -2174,6 +2139,19 @@ const renderAnswerText = (
   };
   const getLegacyMarkersForText = (value: string) =>
     inlineConversationMarkers.filter((marker) => typeof marker.offset !== "number" && marker.anchorText && value.includes(marker.anchorText));
+  const renderLineEndMarkers = (markers: InlineConversationMarkerBinding[], keyPrefix: string) => {
+    const positionalMarkers = markers.filter((marker) => typeof marker.offset === "number");
+    if (positionalMarkers.length === 0) {
+      return null;
+    }
+    return (
+      <span className="line-end-question-markers" aria-label="本行位置提问">
+        {positionalMarkers.map((marker, index) =>
+          renderInlineConversationMarker(marker.conversation, marker.index, openInlineConversation, true, `${keyPrefix}-line-end-${index}-${marker.conversation.id}`)
+        )}
+      </span>
+    );
+  };
   const flushList = () => {
     if (listItems.length === 0) {
       return;
@@ -2261,15 +2239,21 @@ const renderAnswerText = (
         }
         const lineMarkers = [...getMarkersForText(line), ...getLegacyMarkersForText(line)];
         if (isMarkdownListLine(line)) {
+          const contentLine = line.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "");
           listItems.push({
             id: listItemIndex,
-            content: renderInlineAnswerWithTerms(
-              line.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, ""),
-              textBoundTerms,
-              annotationsRevealed,
-              openExplanation,
-              lineMarkers,
-              openInlineConversation
+            content: (
+              <>
+                {renderInlineAnswerWithTerms(
+                  contentLine,
+                  textBoundTerms,
+                  annotationsRevealed,
+                  openExplanation,
+                  lineMarkers,
+                  openInlineConversation
+                )}
+                {renderLineEndMarkers(lineMarkers, `list-${listItemIndex}`)}
+              </>
             )
           });
           listItemIndex += 1;
@@ -2289,6 +2273,7 @@ const renderAnswerText = (
                 lineMarkers,
                 openInlineConversation
               )}
+              {renderLineEndMarkers(lineMarkers, `list-cont-${listItems.length}`)}
             </>
           );
           return;
@@ -2319,6 +2304,7 @@ const renderAnswerText = (
               lineMarkers,
               openInlineConversation
             )}
+            {renderLineEndMarkers(lineMarkers, `p-${elements.length}`)}
           </p>
         );
       });
