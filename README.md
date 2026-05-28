@@ -1,123 +1,125 @@
 # MindLinker
 
-MindLinker is an open-source desktop learning assistant for course notes, theory study, and paper reading. It helps users build a grounded answer from local references, then turn important concepts into explorable links, explanation cards, inline questions, and a project-level knowledge graph.
+MindLinker 是一个开源桌面学习助手，面向课程学习、理论知识梳理和论文阅读。它不是普通聊天机器人，而是围绕“参考资料 -> 主回复 -> 解释链 -> 位置提问 -> 知识图谱”的学习工作流设计：用户可以导入本地参考资料，生成基于参考的回答，并把回答中的关键概念继续展开为可探索的知识网络。
 
-The app is built with Electron, React, TypeScript, and Vite. It is designed as a local desktop application rather than a hosted chatbot page.
+项目基于 Electron、React、TypeScript 和 Vite 构建，目标形态是本地桌面应用，而不是托管网页聊天界面。
 
-## Features
+## 功能特性
 
-- **Project-based workspace**: organize learning projects as top-level folders with references and conversations under each project.
-- **Reference-aware conversations**: import PDFs and other files, parse them locally, and use the parsed reference content when asking a model.
-- **Configurable model providers**: add custom providers, choose the active provider, and use either OpenAI-compatible Chat Completions or OpenAI Responses-style APIs.
-- **Main model and RAG separation**: keep the primary reasoning model separate from optional embedding/RAG configuration.
-- **Structured PDF handling**: parse PDF pages into model-readable text and preserve page/image context for more difficult layouts.
-- **Explanation links**: extract keywords or explain selected text, then render explained terms as inline links and cards.
-- **Position questions**: ask questions at a specific location in a reply, continue the small-window thread, and save it back as a marker in the answer.
-- **Knowledge graph**: inspect concept relationships for a conversation and open concept details from graph nodes.
-- **Local persistence**: projects, conversations, parsed references, explanations, saved questions, and runtime logs are kept locally unless the user deletes them.
-- **Runtime logs for debugging**: model requests, replies, and app events are recorded with secret filtering to make real provider issues diagnosable.
+- **项目化工作区**：以学习项目为最上级目录，每个项目下管理参考资料和多个对话。
+- **参考驱动对话**：支持导入 PDF、Markdown、文本等资料，本地解析后作为模型上下文参与回答。
+- **可配置模型供应商**：支持多个自定义供应商，可选择当前使用的供应商；兼容 OpenAI Chat Completions 风格接口和 OpenAI Responses 风格接口。
+- **主模型与 RAG 分离**：主模型配置和嵌入模型/RAG 配置相互独立；关闭 RAG 时会直接把结构化参考上下文发送给主模型。
+- **PDF 结构化处理**：按页解析 PDF 文本，并为复杂页面保留图片/页面上下文，为后续多模态输入打基础。
+- **解释链**：可抽取关键词生成解释，也可手动划词生成解释；解释项会在正文和解释卡片中以链接形式呈现。
+- **位置提问**：可在回答的具体位置发起小窗问答，支持多轮追问，并可保存为正文中的位置标记。
+- **知识图谱**：基于当前项目/对话中的概念、解释和参考构建知识关系图，并可点击节点查看详情。
+- **本地持久化**：项目、对话、参考解析结果、解释链、位置提问和运行日志都会保存在本地，除非用户主动删除。
+- **运行日志**：记录模型请求、模型回复和应用事件，并过滤常见密钥字段，便于定位真实供应商调用问题。
 
-## Screenshots
+## 截图
 
-Screenshots are not included yet. Contributions that add current UI screenshots are welcome.
+当前仓库暂未放置截图。欢迎贡献与当前界面一致的截图或演示动图。
 
-## Getting Started
+## 快速开始
 
-### Requirements
+### 环境要求
 
-- Node.js 20 or newer
+- Node.js 20 或更新版本
 - npm
-- A model provider API key if you want to call external models
+- 如需调用真实模型，需要准备对应模型供应商的 API Key
 
-### Install
+### 安装依赖
 
 ```bash
 npm install
 ```
 
-### Run the Desktop App
+### 启动桌面应用
 
 ```bash
 npm run dev
 ```
 
-This starts the Vite renderer and launches Electron. For a production-style local run:
+该命令会启动 Vite 渲染进程并打开 Electron 桌面应用。
+
+如需以接近生产的方式本地运行：
 
 ```bash
 npm run start:desktop
 ```
 
-## Configuration
+## 配置模型
 
-Open the app settings and add a model provider:
+进入应用设置页后，可以添加或修改模型供应商配置：
 
-- Provider name
+- 供应商名称
 - Base URL
-- API key
-- API format: OpenAI-compatible Chat Completions or OpenAI Responses
-- Main model name
+- API Key
+- API 格式：OpenAI 兼容 Chat Completions 或 OpenAI Responses
+- 主模型名称
 
-RAG and embedding settings are configured separately from the main model. If RAG is disabled, references are sent as structured context to the configured main model instead of requiring an embedding model.
+RAG 与嵌入模型在独立区域配置。未开启 RAG 时，应用不会强制等待嵌入模型，而是把解析后的参考资料作为结构化上下文交给主模型。
 
-Do not commit API keys, private reference files, or generated runtime data.
+请不要把 API Key、私人参考资料或本地运行数据提交到仓库。
 
-## Development
+## 开发
 
-Common commands:
+常用命令：
 
 ```bash
 npm test
 npm run build
 ```
 
-Useful scripts:
+脚本说明：
 
-- `npm run dev`: run renderer and Electron in development mode.
-- `npm run app`: alias for development mode.
-- `npm run start:desktop`: build and launch Electron.
-- `npm test`: run the Vitest suite once.
-- `npm run test:watch`: run Vitest in watch mode.
-- `npm run build`: type-check and build the renderer.
+- `npm run dev`：以开发模式启动渲染进程和 Electron。
+- `npm run app`：`npm run dev` 的别名。
+- `npm run start:desktop`：先构建，再启动 Electron。
+- `npm test`：运行一次 Vitest 测试。
+- `npm run test:watch`：以 watch 模式运行 Vitest。
+- `npm run build`：执行 TypeScript 检查并构建渲染端。
 
-The maintenance workflow is tracked in [MAINTENANCE.md](MAINTENANCE.md). Bug fixes should include focused verification and clear git commits.
+维护记录见 [MAINTENANCE.md](MAINTENANCE.md)。修复 bug 时应尽量包含聚焦的回归测试、验证命令和清晰的 git 提交信息。
 
-## Project Structure
+## 项目结构
 
 ```text
-electron/              Electron main and preload scripts
-src/                   React renderer, domain logic, tests, and runtime logging
-src/pdfReferences.ts   Local PDF/reference parsing helpers
-src/runtimeLog.ts      Renderer-side runtime logging utilities
+electron/              Electron 主进程与 preload 脚本
+src/                   React 渲染端、领域逻辑、测试与运行日志
+src/pdfReferences.ts   本地 PDF/参考资料解析
+src/runtimeLog.ts      渲染端运行日志工具
 src/KnowledgeGraphView.tsx
-                       Knowledge graph UI
-MAINTENANCE.md         Maintenance and bug-fix log
+                       知识图谱界面
+MAINTENANCE.md         维护与修复记录
 ```
 
-## Data And Privacy
+## 数据与隐私
 
-MindLinker stores app data locally. Model requests are sent only to the provider configured by the user, but those requests may include user prompts, parsed reference content, and selected conversation context. Review provider policies before using private or sensitive documents.
+MindLinker 的应用数据默认保存在本地。模型请求只会发送到用户配置的供应商，但请求内容可能包含用户提示词、解析后的参考资料以及对话上下文。处理私人或敏感文档前，请先确认所用模型供应商的数据政策。
 
-Runtime logs are intended for local debugging. They filter common secret fields, but you should still review logs before sharing them publicly.
+运行日志用于本地调试。虽然日志会过滤常见密钥字段，但在公开分享日志前仍应自行检查。
 
-## Roadmap
+## 路线图
 
-- App packaging and release artifacts for macOS.
-- Stronger vector-store management and import/export flows.
-- Better graph layout controls and graph export.
-- More robust handling for scanned PDFs, tables, and multimodal page images.
-- Optional project backup and sync.
+- macOS 应用打包与发布产物。
+- 更完整的本地向量库管理、导入和导出流程。
+- 更强的知识图谱布局控制与导出能力。
+- 对扫描版 PDF、复杂表格和多模态页面图像的更稳健处理。
+- 可选的项目备份与同步能力。
 
-## Contributing
+## 贡献
 
-Issues and pull requests are welcome. Please keep changes focused, include tests when behavior changes, and describe the user-facing impact clearly.
+欢迎提交 Issue 和 Pull Request。请尽量保持改动聚焦；涉及行为变化时，请补充测试，并在说明中写清楚用户可感知的影响。
 
-Before opening a pull request, run:
+提交 PR 前建议运行：
 
 ```bash
 npm test
 npm run build
 ```
 
-## License
+## 许可证
 
-MindLinker is released under the MIT License. See [LICENSE](LICENSE) for details.
+MindLinker 使用 MIT License 发布。详见 [LICENSE](LICENSE)。
