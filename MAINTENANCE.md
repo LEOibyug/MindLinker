@@ -12,6 +12,25 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Reader Content Refactor
+
+- Extracted the central reader content surface from `App.tsx` into `ReaderContent.tsx`.
+- Kept workspace orchestration in `App.tsx` while moving presentation for:
+  - knowledge-graph rendering and graph error fallback;
+  - in-reader new-conversation canvas;
+  - generated answer rendering and content/annotation loading states;
+  - model configuration/failure state panels;
+  - fallback saved inline-question markers;
+  - reference-change patch/full-rewrite controls;
+  - selected-text rewrite draft preview.
+- Added component-level coverage for generated answer rendering, KaTeX rendering, loading states, fallback inline-question markers, reference update callbacks, rewrite draft display, graph error fallback, and the new-conversation branch.
+- Reduced `App.tsx` from roughly 2,260 lines to roughly 2,158 lines.
+- Verification:
+  - `npm test -- --run src/ReaderContent.test.tsx`
+  - `npm test -- --run src/App.test.tsx -t "keeps a generated answer visible|knowledge graph|reference|rewrite draft|inline question markers|model state|生成回答"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Reader Controls Refactor
 
 - Extracted reading toolbar and reader context menu presentation from `App.tsx` into `ReaderControls.tsx`.

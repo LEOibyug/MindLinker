@@ -5,7 +5,6 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { renderAnswerText, renderAnswerWithInlineConversations } from "./answerRendering";
 import {
   buildConversationDraft,
   buildFallbackAnswer,
@@ -24,13 +23,10 @@ import type { LearningProject, ModelConfig, ProviderConfig, VectorStore } from "
 import type { ConversationKnowledgeGraph } from "./domain";
 import type { Explanation } from "./explanations";
 import { bindExplanationsToAnswerText, bindExplanationsToMarkedTerms, getExplanationAnchorTerm, normalizeTermForMatch } from "./explanations";
-import { GraphErrorBoundary } from "./GraphErrorBoundary";
 import { InlineConversationDialog, renderInlineConversationMarker } from "./InlineConversationUi";
 import type { InlineConversationDraft } from "./InlineConversationUi";
 import type { InlineConversation, InlineConversationMarkerBinding, InlineConversationMessage } from "./inlineConversations";
-import { getInlineConversationAnchorText } from "./inlineConversations";
 import { ExplanationPanel } from "./ExplanationPanel";
-import { KnowledgeGraphView } from "./KnowledgeGraphView";
 import { buildDraftKnowledgeGraph, buildFallbackMarkedTerms, buildProjectKnowledgeGraph } from "./knowledgeGraph";
 import {
   buildRewritePrompt,
@@ -58,6 +54,7 @@ import {
 import { NewConversationPanel } from "./NewConversationPanel";
 import { ProjectSidebar } from "./ProjectSidebar";
 import { HomePage } from "./HomePage";
+import { ReaderContent } from "./ReaderContent";
 import { ReaderContextMenu, ReaderToolbar } from "./ReaderControls";
 
 type ContextMenuState = {
@@ -2061,146 +2058,47 @@ export function App() {
             onViewModeChange={setViewMode}
           />
 
-          {viewMode === "graph" ? (
-            activeKnowledgeGraphResult.error ? (
-              <section className="graph-error-panel" role="alert" aria-label="知识图谱渲染失败">
-                <h2>知识图谱暂时无法渲染</h2>
-                <p>当前对话内容仍然可用。已记录错误信息，可以切回阅读器继续查看正文。</p>
-              </section>
-            ) : (
-              <GraphErrorBoundary
-                onError={(error, info) => {
-                  appendRuntimeLog(
-                    "graph",
-                    "知识图谱渲染失败",
-                    {
-                      message: error.message,
-                      stack: error.stack,
-                      componentStack: info.componentStack,
-                      projectId: activeProject.id,
-                      conversationId: activeConversation.id,
-                      nodeCount: activeKnowledgeGraph.nodes.length,
-                      edgeCount: activeKnowledgeGraph.edges.length
-                    },
-                    "error"
-                  );
-                }}
-              >
-                <KnowledgeGraphView graph={activeKnowledgeGraph} title={activeConversation.title} />
-              </GraphErrorBoundary>
-            )
-          ) : newConversationOpen ? (
-            <article className="answer-document new-conversation-canvas" aria-label="新建对话面板">
-              {renderNewConversationPanel()}
-            </article>
-          ) : (
-          <article className="answer-document" aria-label="回答正文" onContextMenu={openReaderMenu}>
-            {generationPhase === "content" ? (
-              <div className="generation-overlay" role="status" aria-label="生成回答中">
-                <div className="generation-card">
-                  <span className="loader-ring" />
-                  <strong>正在生成回答</strong>
-                  <p>{activeDraft ? `已载入 ${activeDraft.referenceTitles.length} 份参考` : "正在准备上下文"}</p>
-                </div>
-              </div>
-            ) : null}
-            {generationPhase === "annotations" ? (
-              <div className="generation-banner" role="status">
-                <span className="pulse-dot" />
-                正在生成解释链
-              </div>
-            ) : null}
-            {activeDraft ? (
-              <div className="draft-answer">
-                {activeDraft.modelStatus === "generated" && activeDraft.answerMarkdown ? (
-                  <>
-                    {renderAnswerWithInlineConversations(
-                      activeDraft.answerMarkdown,
-                      renderedConversationExplanations,
-                      activeInlineConversations,
-                      annotationsRevealed,
-                      openExplanation,
-                      openInlineConversation,
-                      renderInlineConversationMarker
-                    )}
-                  </>
-                ) : activeDraft.modelStatus === "needs-configuration" || activeDraft.modelStatus === "failed" ? (
-                  <div className="model-state-panel" role="note">
-                    <strong>{activeDraft.modelError ?? "需要配置模型"}</strong>
-                    {renderAnswerText(activeDraft.answerMarkdown)}
-                  </div>
-                ) : (
-                  <p>还没有生成回答。可以从左侧新建对话，或从主页输入问题开始新的学习对话。</p>
-                )}
-              </div>
-            ) : (
-              <div className="empty-reader-state">
-                <h1>{activeConversation.title}</h1>
-                <p>这个对话还没有生成回答。左侧参考会用于下一次生成，不会展示其他项目的内容。</p>
-              </div>
-            )}
-            {fullRewriteApplied ? (
-              <p className="rewritten-answer">
-                全文重写结果：当前回答已基于剩余参考重新组织，移除了依赖已删除资料的似然段落，并重新生成解释链锚点。
-              </p>
-            ) : null}
-            {appliedPatch ? (
-              <p className="inserted-answer">
-                新参考补充：下一章节讲义把 softmax 输出与 one-hot 标签分布放在同一框架下说明，因此这里可以插入梯度信号如何推动正确类别概率上升的补充，而不必全文重写。
-              </p>
-            ) : null}
-            {activeInlineConversations.length > 0 ? (
-              <section className="inline-conversation-list" aria-label="已保存的位置提问">
-                {activeInlineConversations
-                  .filter(
-                    (conversation) =>
-                      (typeof conversation.anchorOffset !== "number" || !(activeDraft?.answerMarkdown ?? "").trim()) &&
-                      (!getInlineConversationAnchorText(conversation) || !activeDraft?.answerMarkdown.includes(getInlineConversationAnchorText(conversation)))
-                  )
-                  .map((conversation, index) => renderInlineConversationMarker(conversation, index, openInlineConversation))}
-              </section>
-            ) : null}
-            {activeReferencePlan ? (
-              <aside className="reference-change-panel" aria-label="参考变更方案">
-                <p className="eyebrow">参考变更</p>
-                <h2>{activeReferencePlan.title}</h2>
-                {activeReferencePlan.mode === "patch" ? (
-                  <p>建议优先使用插入式更新，尽量保留现有批注、解释链和知识图谱锚点。</p>
-                ) : (
-                  <p>当前参考删除会破坏关键段落来源，无法只靠插入修复。请确认是否全文重写。</p>
-                )}
-                <div className="operation-list">
-                  {activeReferencePlan.operations.map((operation) => (
-                    <article key={`${operation.kind}-${operation.blockId}`}>
-                      <strong>
-                        {operation.kind} · {operation.blockId}
-                      </strong>
-                      <span>{operation.summary}</span>
-                    </article>
-                  ))}
-                </div>
-                <div className="reference-change-actions">
-                  {activeReferencePlan.mode === "patch" ? (
-                    <button className="primary-button" type="button" onClick={applyReferencePatch}>
-                      执行插入式更新
-                    </button>
-                  ) : (
-                    <button className="primary-button" type="button" onClick={applyFullRewrite}>
-                      确认全文重写
-                    </button>
-                  )}
-                </div>
-              </aside>
-            ) : null}
-            {rewriteDraft ? (
-              <aside className="rewrite-draft" aria-label="重写草稿">
-                <p className="eyebrow">重写草稿</p>
-                <p>选区：{rewriteDraft}</p>
-                <textarea defaultValue={buildRewritePrompt(rewriteDraft)} />
-              </aside>
-            ) : null}
-          </article>
-          )}
+          <ReaderContent
+            activeDraft={activeDraft}
+            activeInlineConversations={activeInlineConversations}
+            annotationsRevealed={annotationsRevealed}
+            appliedPatch={appliedPatch}
+            conversationTitle={activeConversation.title}
+            fullRewriteApplied={fullRewriteApplied}
+            generationPhase={generationPhase}
+            graph={activeKnowledgeGraph}
+            graphError={activeKnowledgeGraphResult.error}
+            graphTitle={activeConversation.title}
+            newConversationOpen={newConversationOpen}
+            newConversationPanel={renderNewConversationPanel()}
+            referencePlan={activeReferencePlan}
+            renderedConversationExplanations={renderedConversationExplanations}
+            rewriteDraft={rewriteDraft}
+            rewritePrompt={rewriteDraft ? buildRewritePrompt(rewriteDraft) : ""}
+            viewMode={viewMode}
+            onApplyFullRewrite={applyFullRewrite}
+            onApplyReferencePatch={applyReferencePatch}
+            onContextMenu={openReaderMenu}
+            onExplanationOpen={openExplanation}
+            onGraphError={(error, info) => {
+              appendRuntimeLog(
+                "graph",
+                "知识图谱渲染失败",
+                {
+                  message: error.message,
+                  stack: error.stack,
+                  componentStack: info.componentStack,
+                  projectId: activeProject.id,
+                  conversationId: activeConversation.id,
+                  nodeCount: activeKnowledgeGraph.nodes.length,
+                  edgeCount: activeKnowledgeGraph.edges.length
+                },
+                "error"
+              );
+            }}
+            onInlineConversationOpen={openInlineConversation}
+            renderInlineConversationMarker={renderInlineConversationMarker}
+          />
 
           {contextMenu ? (
             <ReaderContextMenu
