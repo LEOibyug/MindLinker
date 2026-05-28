@@ -12,6 +12,20 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - App Module Boundary Refactor
+
+- Continued reducing `App.tsx` by extracting non-UI responsibilities into focused modules:
+  - `conversationDrafts.ts` for conversation draft types, normalization, answer-mode prompts, fallback answers, title cleanup, and inline-conversation storage normalization.
+  - `markedTerms.ts` for explanation marker parsing, malformed marker cleanup, visible streaming text cleanup, keyword JSON parsing, explanation JSON parsing, and term batching.
+  - `modelClient.ts` for provider/model selection, OpenAI-compatible and Responses requests, SSE stream parsing, model payload text extraction, title generation, keyword extraction, explanation generation, rewrite prompt construction, and inline question calls.
+- Kept `App.tsx` focused on application state orchestration, UI event handlers, persistence wiring, and rendering.
+- Added module-level regression coverage for the extracted helpers so future contributors can test protocol parsing and draft normalization without mounting the full app.
+- Reduced `App.tsx` from roughly 4,179 lines to roughly 2,944 lines while keeping behavior stable.
+- Verification:
+  - `npm test -- --run src/conversationDrafts.test.ts src/markedTerms.test.ts src/modelClient.test.ts`
+  - `npm test`
+  - `npm run build`
+
 ### 2026-05-29 - Explanation Panel Summary
 
 - Added an "解释 / 汇总" switch to the explanation panel.
