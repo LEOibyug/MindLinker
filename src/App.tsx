@@ -11,7 +11,6 @@ import {
   Sparkles,
   PencilLine,
   Plus,
-  Paperclip,
   Trash2,
   Search,
   Settings,
@@ -4232,29 +4231,33 @@ export function App() {
             </aside>
             <section className="home-composer">
               <h1>Let's link your mind</h1>
-              <form
-                aria-label="学习输入栏"
-                className="home-dropzone"
+              <label
+                className="home-reference-dropzone"
+                title="添加参考文件"
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {
                   event.preventDefault();
                   void parseHomeReferences([...homeFiles, ...Array.from(event.dataTransfer.files)]);
                 }}
+              >
+                <FilePlus2 aria-hidden="true" size={20} />
+                <span>拖入/导入参考资料</span>
+                <small>PDF、Markdown、文本或图片</small>
+                <input
+                  aria-label="添加参考文件"
+                  multiple
+                  type="file"
+                  onChange={(event) => void parseHomeReferences(Array.from(event.target.files ?? []))}
+                />
+              </label>
+              <form
+                aria-label="学习输入栏"
+                className="home-dropzone"
                 onSubmit={(event) => {
                   event.preventDefault();
                   void startProjectFromPrompt();
                 }}
               >
-                <label className="attachment-button" title="添加参考文件">
-                  <Paperclip aria-hidden="true" size={16} />
-                  <span>参考</span>
-                  <input
-                    aria-label="添加参考文件"
-                    multiple
-                    type="file"
-                    onChange={(event) => void parseHomeReferences(Array.from(event.target.files ?? []))}
-                  />
-                </label>
                 <input
                   aria-label="学习问题"
                   placeholder="输入你想理解的课程问题、论文段落或理论概念"

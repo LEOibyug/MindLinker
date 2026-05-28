@@ -80,7 +80,7 @@ button {
 
 .home-dropzone {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   width: min(860px, calc(100vw - 390px));
@@ -90,6 +90,47 @@ button {
   background: #fff;
   box-shadow: 0 24px 60px rgba(35, 49, 76, .12);
   padding: 9px 10px;
+}
+
+.home-reference-dropzone {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon title"
+    "icon note";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  width: min(860px, calc(100vw - 390px));
+  min-height: 86px;
+  border: 1px dashed #9fb6d8;
+  border-radius: 8px;
+  background: #f7faff;
+  color: #1f3150;
+  cursor: pointer;
+  padding: 16px 18px;
+}
+
+.home-reference-dropzone:hover {
+  border-color: #5d87d8;
+  background: #f2f7ff;
+}
+
+.home-reference-dropzone svg {
+  grid-area: icon;
+  color: #2f61bb;
+}
+
+.home-reference-dropzone span {
+  grid-area: title;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.home-reference-dropzone small {
+  grid-area: note;
+  color: #66758c;
+  font-size: 12px;
 }
 
 .home-dropzone input[aria-label="学习问题"] {
@@ -102,24 +143,6 @@ button {
   color: #1b2435;
   font: inherit;
   line-height: 40px;
-}
-
-.attachment-button {
-  display: flex;
-  align-items: center;
-}
-
-.attachment-button {
-  gap: 8px;
-  min-height: 42px;
-  border: 1px solid #cbd6e6;
-  border-radius: 8px;
-  background: #fff;
-  color: #27334a;
-  cursor: pointer;
-  font-size: 13px;
-  padding: 0 11px;
-  white-space: nowrap;
 }
 
 .home-dropzone .primary-button {
@@ -164,7 +187,7 @@ button {
   opacity: 0;
 }
 
-.attachment-button input {
+.home-reference-dropzone input {
   position: absolute;
   width: 1px;
   height: 1px;

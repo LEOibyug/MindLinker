@@ -168,6 +168,7 @@ describe("MindLinker shell", () => {
     expect(screen.getByRole("heading", { name: "Let's link your mind" })).toBeInTheDocument();
     expect(screen.getByRole("form", { name: "学习输入栏" })).toBeInTheDocument();
     expect(screen.getByLabelText("学习问题")).toBeInTheDocument();
+    expect(screen.getByText("拖入/导入参考资料")).toBeInTheDocument();
     expect(screen.getByLabelText("添加参考文件")).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "主页项目列表" })).toBeInTheDocument();
     expect(screen.getByText("还没有项目。从右侧输入一个问题开始。")).toBeInTheDocument();
