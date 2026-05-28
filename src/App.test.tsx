@@ -3108,6 +3108,27 @@ describe("MindLinker shell", () => {
     expect(formula?.dataset.selectableText).toContain("log");
   });
 
+  it("strips markdown blockquote markers before rendering definitions and formulas", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await configureMockChatApi(
+      user,
+      "凸函数定义如下：\n\n> 对于任意 $x_1, x_2$ 和任意 $0 \\le \\lambda \\le 1$，如果函数 $f$ 满足：\n\n> f(\\lambda x_1 + (1-\\lambda)x_2) \\le \\lambda f(x_1) + (1-\\lambda)f(x_2)\n\n> 则 $f$ 为凸函数。"
+    );
+
+    await user.type(screen.getByLabelText("学习问题"), "讲凸函数");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    expect(await screen.findByText(/凸函数定义如下/)).toBeInTheDocument();
+    const answer = screen.getByRole("article", { name: "回答正文" });
+    expect(answer).not.toHaveTextContent("> 对于任意");
+    expect(answer).not.toHaveTextContent("> f(");
+    expect(answer).not.toHaveTextContent("> 则");
+    expect(screen.getByText(/对于任意/)).toBeInTheDocument();
+    expect(screen.getByText(/则/)).toBeInTheDocument();
+    expect(document.querySelector(".formula-block .katex")).toBeInTheDocument();
+  });
+
   it("removes formula wrapper quotes and renders reciprocal probabilities as fractions", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();
@@ -3203,6 +3224,7 @@ describe("MindLinker shell", () => {
     await screen.findByText("公式格式约束测试。");
     const requestText = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body ?? "")).messages[0].content[0].text;
     expect(requestText).toContain("不要使用 ```math");
+    expect(requestText).toContain("不要使用 Markdown 引用块");
     expect(requestText).toContain("不要把数学符号写成行内代码");
     expect(requestText).toContain("错误示例：`i`、`a_i/b_i`");
   });

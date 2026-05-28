@@ -428,6 +428,7 @@ const mathFormulaProtocol = `<math_formula_protocol>
 - 块级公式必须使用三行标准格式：第一行只写 $$，第二行只写公式本体，第三行只写 $$。
 - $$ 所在行只能包含 $$，不能包含“即”“公式为”等任何正文。
 - 不要使用 \`\`\`math、\`\`\`latex 或任何代码围栏包裹数学公式。
+- 不要使用 Markdown 引用块表达定义、公式或推导；不要在行首添加 >。
 - 不要把数学符号写成行内代码；错误示例：\`i\`、\`a_i/b_i\`；正确写法：$i$、$a_i/b_i$。
 - 禁止写成“即 $$...$$”“公式：$$...$$”或把句末标点放进公式分隔符。
 - 分式必须写成 \\frac{...}{...}，例如 \\log\\frac{1}{p(x)}，不要写成 1/p(x) 这类斜杠形式。
@@ -1580,6 +1581,8 @@ const isMarkdownListLine = (line: string) => /^[-*]\s+\S/.test(line.trim()) || /
 
 const looksLikeExplanatoryText = (line: string) => /[\u4e00-\u9fff]{2,}|[，。；：、]/.test(line);
 
+const stripMarkdownQuotePrefix = (line: string) => line.replace(/^\s*>\s?/, "");
+
 const isStandaloneMathLine = (line: string) => {
   if (line.includes("$$") || line.includes("\\$")) {
     return false;
@@ -1630,7 +1633,8 @@ const parseAnswerBlocks = (text: string): AnswerBlock[] => {
     formulaLines = [];
   };
 
-  lines.forEach((line) => {
+  lines.forEach((rawLine) => {
+    const line = stripMarkdownQuotePrefix(rawLine);
     const trimmed = line.trim();
     if (/^```(?:math|latex|tex)?\s*$/i.test(trimmed)) {
       if (inFormula) {

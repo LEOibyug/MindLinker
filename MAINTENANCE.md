@@ -162,3 +162,18 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "formula|math|markdown wrappers|inline math|inline code|fenced|code fences|backticks"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - Markdown Quote Marker Cleanup
+
+- Fixed model replies that use Markdown blockquote syntax for definitions or formulas so leading `>` characters no longer leak into the reader.
+- The answer parser now strips a single line-level quote prefix before classifying text, inline math, and formula blocks.
+- Tightened the math formula prompt to tell the main model not to use Markdown quote blocks for definitions, formulas, or derivations.
+- Regression coverage:
+  - blockquoted definition prose renders without visible `>` markers;
+  - blockquoted standalone formulas still render through KaTeX;
+  - the main-answer prompt explicitly forbids Markdown quote blocks for math-heavy content.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "blockquote markers|code fences or inline code"`
+  - `npm test -- src/App.test.tsx -t "formula|math|markdown wrappers|inline math|inline code|fenced|code fences|backticks|blockquote|quoted"`
+  - `npm test`
+  - `npm run build`
