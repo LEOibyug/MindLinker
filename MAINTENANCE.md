@@ -12,6 +12,23 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Home Page Refactor
+
+- Extracted the home project list and starter composer from `App.tsx` into `HomePage.tsx`.
+- Kept home business flow in `App.tsx` while moving presentation for:
+  - existing project list;
+  - drag/drop and picker reference import area;
+  - horizontal learning prompt composer;
+  - main-answer style selection;
+  - local reference parsing status and removable pending-reference pills.
+- Added component-level tests for project opening, prompt editing, answer-mode selection, file forwarding, reference removal, empty project state, and settings-hidden state.
+- Reduced `App.tsx` from roughly 2,402 lines to roughly 2,312 lines.
+- Verification:
+  - `npm test -- --run src/HomePage.test.tsx`
+  - `npm test -- --run src/HomePage.test.tsx src/App.test.tsx -t "home screen|home project list|home prompt|home references|appends home references|removes an attached home reference|prominent parsing|empty|main-answer style|home-style project starter"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Explanation Panel Refactor
 
 - Extracted the right-side explanation chain and summary UI from `App.tsx` into `ExplanationPanel.tsx`.
