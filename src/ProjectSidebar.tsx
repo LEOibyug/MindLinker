@@ -57,13 +57,16 @@ export function ProjectSidebar({
   onWorkspaceReferencesSelected
 }: ProjectSidebarProps) {
   return (
-    <aside className="project-sidebar" aria-label="项目目录">
-      <section className="sidebar-section">
-        <div className="sidebar-heading">
+    <aside className="library-panel" aria-label="项目目录">
+      <section>
+        <div className="panel-title">
           <BookOpen aria-hidden="true" size={17} />
-          <span>项目</span>
-          <button className="mini-icon-button" type="button" aria-label="新建项目" onClick={onCreateProject}>
+          <h2>项目</h2>
+        </div>
+        <div className="project-actions">
+          <button className="mini-action-button" type="button" onClick={onCreateProject}>
             <Plus aria-hidden="true" size={14} />
+            新建项目
           </button>
         </div>
         <div className="project-title-row">
@@ -79,6 +82,10 @@ export function ProjectSidebar({
             <Brain aria-hidden="true" size={14} />
           </button>
         </div>
+      </section>
+
+      <section className="stack">
+        <h3>项目文件夹</h3>
         <div className="project-tree" role="tree" aria-label="学习项目文件夹">
           {projects.map((project) => {
             const isActiveProject = project.id === activeProjectId;
@@ -96,7 +103,7 @@ export function ProjectSidebar({
               >
                 <div className="project-folder-row">
                   <button
-                    className={`folder-button ${isActiveProject ? "active" : ""}`}
+                    className={`project-folder-button ${isActiveProject ? "active" : ""}`}
                     type="button"
                     aria-label={`项目 ${title}`}
                     onClick={(event) => {
@@ -106,6 +113,7 @@ export function ProjectSidebar({
                   >
                     <Folder aria-hidden="true" size={15} />
                     <span>{title}</span>
+                    <small>{project.conversations.length} 个对话 · {project.documents.length} 份参考</small>
                   </button>
                   <button
                     className={`mini-icon-button ${confirmingProjectDelete ? "danger" : ""}`}
@@ -124,21 +132,23 @@ export function ProjectSidebar({
                     <section role="group" aria-label={`${title} 参考`} className="folder-group">
                       <div className="folder-group-title">
                         <h4>参考</h4>
-                        <button className="mini-action-button" type="button" onClick={onIntroduceReference}>
-                          <FilePlus2 aria-hidden="true" size={14} />
-                          引入参考
-                        </button>
-                        <input
-                          id="workspace-reference-input"
-                          className="visually-hidden-input"
-                          multiple
-                          type="file"
-                          aria-label="导入参考文件"
-                          onChange={(event) => {
-                            onWorkspaceReferencesSelected(Array.from(event.target.files ?? []));
-                            event.currentTarget.value = "";
-                          }}
-                        />
+                        <div className="reference-actions">
+                          <button className="mini-action-button" type="button" onClick={onIntroduceReference}>
+                            <FilePlus2 aria-hidden="true" size={14} />
+                            引入参考
+                          </button>
+                          <input
+                            id="workspace-reference-input"
+                            className="visually-hidden-input"
+                            multiple
+                            type="file"
+                            aria-label="导入参考文件"
+                            onChange={(event) => {
+                              onWorkspaceReferencesSelected(Array.from(event.target.files ?? []));
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </div>
                       </div>
                       {references.map((document) => (
                         <article className={`resource-card ${document.status === "indexed" ? "active" : ""}`} key={document.id}>

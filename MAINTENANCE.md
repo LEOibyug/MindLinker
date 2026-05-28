@@ -12,6 +12,19 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Sidebar Style Regression Fix
+
+- Restored the extracted project sidebar to the existing workspace sidebar style contract.
+- Root cause:
+  - the refactor renamed key style hooks from `library-panel`, `panel-title`, and `project-folder-button`;
+  - the existing CSS no longer matched, so project folder controls fell back to native button styling.
+- Fixed `ProjectSidebar.tsx` to keep the old layout/style classes while preserving the extracted component boundary.
+- Added component coverage to assert the sidebar keeps `library-panel`, `project-folder-button`, and folder metadata text.
+- Verification:
+  - `npm test -- --run src/ProjectSidebar.test.tsx src/App.test.tsx -t "folder with reference|project titles|persists parsed reference"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Project Sidebar And New Conversation Refactor
 
 - Extracted workspace project navigation into `ProjectSidebar.tsx`.

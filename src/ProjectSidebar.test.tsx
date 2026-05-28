@@ -102,11 +102,12 @@ describe("ProjectSidebar", () => {
       />
     );
 
-    expect(screen.getByRole("complementary", { name: "项目目录" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "项目目录" })).toHaveClass("library-panel");
     expect(screen.getByRole("tree", { name: "学习项目文件夹" })).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: "项目 信息论课程" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByDisplayValue("信息论课程")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "项目 信息论课程" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "项目 信息论课程" })).toHaveClass("project-folder-button", "active");
+    expect(screen.getByRole("button", { name: "项目 信息论课程" })).toHaveTextContent("2 个对话 · 2 份参考");
     expect(screen.getByTitle("abcdefghijklmno.pdf")).toHaveTextContent("abcde...lmno.pdf");
     expect(screen.getByRole("button", { name: "对话 信道容量 正在生成" })).toHaveClass("running");
 
