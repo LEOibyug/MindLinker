@@ -157,7 +157,7 @@ const enterWorkspace = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 const startExplanationGeneration = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(await screen.findByRole("button", { name: /生成解释链|更新解释链/ }));
+  await user.click(await screen.findByRole("button", { name: "自动解释关键词" }));
 };
 
 describe("MindLinker shell", () => {
@@ -388,9 +388,9 @@ describe("MindLinker shell", () => {
     expect(await screen.findByRole("heading", { name: "课程说明" })).toBeInTheDocument();
     expect(screen.getByText("课件内容")).toBeInTheDocument();
     expect(screen.queryByText(/\*\*课件内容\*\*/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成解释链" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "自动解释关键词" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "解释 交叉熵" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "生成解释链" }));
+    await user.click(screen.getByRole("button", { name: "自动解释关键词" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
     expect(screen.queryByRole("heading", { name: "交叉熵" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "解释 交叉熵" }));
@@ -899,7 +899,7 @@ describe("MindLinker shell", () => {
     await waitFor(() => expect(screen.getByRole("article", { name: "回答正文" })).toHaveTextContent("码长和前缀码"));
     expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("关键词抽取任务"))).toBe(false);
     expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("待解释词表"))).toBe(false);
-    await user.click(screen.getByRole("button", { name: "生成解释链" }));
+    await user.click(screen.getByRole("button", { name: "自动解释关键词" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 码长" })).toHaveClass("revealed"));
     expect(screen.getByRole("button", { name: "解释 前缀码" })).toBeInTheDocument();
     expect(screen.queryByText(/\[\[ml:/)).not.toBeInTheDocument();
@@ -1082,7 +1082,7 @@ describe("MindLinker shell", () => {
 
     await screen.findByText(/模型会解释/);
     expect(explanationController).toBeNull();
-    await user.click(screen.getByRole("button", { name: "生成解释链" }));
+    await user.click(screen.getByRole("button", { name: "自动解释关键词" }));
     await waitFor(() => expect(explanationController).not.toBeNull());
     const explanationPanel = screen.getByRole("complementary", { name: "解释与来源" });
     expect(within(explanationPanel).getByRole("status", { name: "解释链生成中" })).toBeInTheDocument();
@@ -1148,7 +1148,7 @@ describe("MindLinker shell", () => {
 
     await screen.findByText(/这里解释/);
     expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("待解释词表"))).toBe(false);
-    await user.click(screen.getByRole("button", { name: "生成解释链" }));
+    await user.click(screen.getByRole("button", { name: "自动解释关键词" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
     expect(screen.queryByRole("heading", { name: "交叉熵" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "解释 交叉熵" }));
@@ -1426,7 +1426,7 @@ describe("MindLinker shell", () => {
     await user.type(screen.getByLabelText("学习问题"), "解释交叉熵");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
     await screen.findByText(/这段回答介绍/);
-    await user.click(screen.getByRole("button", { name: "生成解释链" }));
+    await user.click(screen.getByRole("button", { name: "自动解释关键词" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
     expect(screen.queryByRole("heading", { name: "交叉熵" })).not.toBeInTheDocument();
 
@@ -2962,7 +2962,7 @@ describe("MindLinker shell", () => {
     await user.click(screen.getByRole("button", { name: "对话 分类损失" }));
 
     expect(screen.getByText(/后台生成完成的回答/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成解释链" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "自动解释关键词" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "解释 交叉熵" })).not.toBeInTheDocument();
     await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
@@ -3392,7 +3392,7 @@ describe("MindLinker shell", () => {
     expect(screen.queryByRole("button", { name: "逐个渲染批注" })).not.toBeInTheDocument();
 
     await screen.findByText(/这是重新生成的示例主回复/);
-    expect(screen.getByRole("button", { name: "生成解释链" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "自动解释关键词" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "解释 交叉熵" })).not.toBeInTheDocument();
     await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));

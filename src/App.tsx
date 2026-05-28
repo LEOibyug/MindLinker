@@ -4803,7 +4803,7 @@ export function App() {
                   onClick={() => void generateExplanationsForConversation()}
                 >
                   <Sparkles aria-hidden="true" size={16} />
-                  {activeConversationExplanations.length > 0 ? "更新解释链" : "生成解释链"}
+                  自动解释关键词
                 </button>
               ) : null}
               <button
