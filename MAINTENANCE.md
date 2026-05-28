@@ -12,6 +12,20 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Source Directory Structure Refactor
+
+- Reorganized `src/` into responsibility-oriented directories:
+  - `app/` for application entry, shell, workspace composition, and app-level tests;
+  - `components/` for UI components grouped by home, reader, panels, sidebar, and inline conversation;
+  - `domain/` for domain types and pure domain helpers;
+  - `services/` for model, PDF/reference, runtime log, provider settings, and reference cache services.
+- Moved tests alongside their implementation files to keep component and service boundaries easy to discover.
+- Updated `index.html` to load `src/app/main.tsx` and adjusted the app stylesheet import to keep the Electron/Vite entry working.
+- Kept behavior unchanged; this commit is a structural move only.
+- Verification:
+  - `npm run build -- --mode development`
+  - `npm test`
+
 ### 2026-05-29 - Reference Cache Logic Refactor
 
 - Extracted local reference-cache helpers from `App.tsx` into `referenceCache.ts`.
