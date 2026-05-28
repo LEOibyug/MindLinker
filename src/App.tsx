@@ -312,7 +312,8 @@ const stripExplainableMarkers = (text: string) => parseMarkedAnswer(text).cleanM
 const stripMalformedExplainableMarkers = (text: string) =>
   text
     .replace(/\[\[\/ml(?::[^\]\n]+)?\]\]/g, "")
-    .replace(/\[\[ml:([^\]\n]+)\]\]/g, (_match, rawId: string) => rawId.trim())
+    .replace(/\[\[ml:([^\]\n]+)\]\](?=\[\[ml:|\s|$|[，。；：、,.!?])/g, (_match, rawId: string) => rawId.trim())
+    .replace(/\[\[ml:[^\]\n]+\]\]/g, "")
     .replace(/\[\[([^\]\n]{1,100})\]\]/g, (_match, rawId: string) => rawId.trim());
 
 const parseBoldSegments = (text: string) => {

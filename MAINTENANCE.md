@@ -193,3 +193,18 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "formula|math|markdown wrappers|markdown tables|inline math|inline code|fenced|code fences|backticks|blockquote|quoted|list items|headings"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - Unclosed Explainable Marker Cleanup
+
+- Fixed malformed model output such as `[[ml:code-length]]码长` so internal marker ids no longer render into the answer.
+- The cleanup now distinguishes two malformed cases:
+  - a start marker immediately followed by visible term text is removed while keeping the visible term;
+  - consecutive or empty malformed start markers still keep their id text as a fallback readable term.
+- Regression coverage:
+  - unclosed start markers before list terms do not expose `[[ml:...]]` or ids such as `code-length`;
+  - previous malformed-marker, id-suffixed closing-marker, and streaming-marker regressions still pass.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "unclosed explainable start markers|malformed explanation markers|malformed closing explainable markers|streaming visible"`
+  - `npm test -- src/App.test.tsx -t "marker|markers|explanation text|explanation links|malformed|unclosed|streaming visible|formula|math|list items"`
+  - `npm test`
+  - `npm run build`

@@ -3246,6 +3246,25 @@ describe("MindLinker shell", () => {
     expect(screen.getByText(/Information content of an outcome 是关于事件发生概率的函数/)).toBeInTheDocument();
   });
 
+  it("strips unclosed explainable start markers without exposing marker ids", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await configureMockChatApi(
+      user,
+      "编码层次如下：\n\n- [[ml:code-length]]码长$l(x)$：码字 $c(x)$ 的长度。\n- [[ml:non-singular-code]]非奇异码：不同符号有不同码字。"
+    );
+
+    await user.type(screen.getByLabelText("学习问题"), "讲变长编码");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    expect(await screen.findByText(/编码层次如下/)).toBeInTheDocument();
+    expect(screen.getByText(/码长/)).toBeInTheDocument();
+    expect(screen.getByText(/非奇异码/)).toBeInTheDocument();
+    expect(screen.queryByText(/\[\[ml:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/code-length/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/non-singular-code/)).not.toBeInTheDocument();
+  });
+
   it("renders deeper markdown headings instead of showing raw hash markers", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();
