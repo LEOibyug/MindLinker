@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-electron/
+.vite/
+.npm-cache/
+.superpowers/
+temp/
+.DS_Store
+visual-layout-options.html
+*.log
