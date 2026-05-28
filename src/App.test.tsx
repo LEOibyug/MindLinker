@@ -107,8 +107,31 @@ const configureMockChatApi = async (
 ) => {
   vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
     const body = String(init?.body ?? "");
+    const isTermExtraction = body.includes("关键词抽取任务");
     const isExplanationRequest = body.includes("待解释词表");
     const isTitleRequest = body.includes("项目标题生成任务");
+    if (isTermExtraction) {
+      const parsedTerms = (() => {
+        try {
+          const parsed = JSON.parse(explanationJson);
+          const items = Array.isArray(parsed) ? parsed : Array.isArray(parsed.explanations) ? parsed.explanations : [];
+          return items
+            .map((item: any, index: number) => ({
+              id: typeof item?.id === "string" ? item.id : `term-${index + 1}`,
+              term: String(item?.term ?? item?.label ?? item?.name ?? "").trim()
+            }))
+            .filter((item: { term: string }) => item.term);
+        } catch {
+          return [];
+        }
+      })();
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ terms: parsedTerms }) } }]
+        })
+      } as Response;
+    }
     return {
       ok: true,
       json: async () => ({
@@ -131,6 +154,10 @@ const configureMockChatApi = async (
 
 const enterWorkspace = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(screen.getByRole("button", { name: "打开项目 分布距离与损失函数" }));
+};
+
+const startExplanationGeneration = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(await screen.findByRole("button", { name: /生成解释链|更新解释链/ }));
 };
 
 describe("MindLinker shell", () => {
@@ -296,12 +323,12 @@ describe("MindLinker shell", () => {
     expect(requestText).toContain("不要写成 \\$...\\$");
   });
 
-  it("sends strict explainable marker grammar to the main model", async () => {
+  it("keeps the main-answer prompt independent from explanation generation", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.spyOn(window, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({
-        choices: [{ message: { content: "这是包含解释标记格式约束的回答。" } }]
+        choices: [{ message: { content: "这是不包含解释任务噪声的回答。" } }]
       })
     } as Response);
     render(<App />);
@@ -314,13 +341,13 @@ describe("MindLinker shell", () => {
     await user.type(screen.getByLabelText("学习问题"), "讲 Jensen 标记");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
 
-    await screen.findByText("这是包含解释标记格式约束的回答。");
+    await screen.findByText("这是不包含解释任务噪声的回答。");
     const requestBody = String(fetchMock.mock.calls[0]?.[1]?.body ?? "");
     const requestText = JSON.parse(requestBody).messages[0].content[0].text;
-    expect(requestText).toContain("<explainable_marker_protocol>");
-    expect(requestText).toContain("裸 [[id]] 是非法格式");
-    expect(requestText).toContain("[[convex-function]]");
-    expect(requestText).toContain("[[ml:convex-function]]凸函数[[/ml]]");
+    expect(requestText).not.toContain("<explainable_marker_protocol>");
+    expect(requestText).not.toContain("解释链");
+    expect(requestText).not.toContain("解释标记");
+    expect(requestText).not.toContain("[[ml:");
   });
 
   it("keeps a generated answer visible after the generation animation finishes", async () => {
@@ -336,12 +363,14 @@ describe("MindLinker shell", () => {
 
     expect(screen.getByText("正在生成回答")).toBeInTheDocument();
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
-
     expect(screen.queryByText("正在读取参考并组织回答。第一阶段会先生成可读正文，第二阶段再逐个绑定需要解释的概念与来源，避免把其他项目的内容带入当前对话。")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "课程说明" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "课程说明" })).toBeInTheDocument();
     expect(screen.getByText("课件内容")).toBeInTheDocument();
     expect(screen.queryByText(/\*\*课件内容\*\*/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成解释链" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "解释 交叉熵" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "生成解释链" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
     expect(screen.queryByRole("heading", { name: "交叉熵" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "解释 交叉熵" }));
     expect(screen.getByRole("heading", { name: "交叉熵" })).toBeInTheDocument();
@@ -417,9 +446,7 @@ describe("MindLinker shell", () => {
     await waitFor(() => expect(within(reader).getByText(/其中/)).toBeInTheDocument());
     expect(within(reader).getByText(/信息熵/)).toBeInTheDocument();
     expect(screen.queryByText(/\[\[ml:/)).not.toBeInTheDocument();
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("待解释词表"))).toBe(true)
-    );
+    expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("待解释词表"))).toBe(false);
     await waitFor(() => expect(screen.queryByText("正在生成解释链")).not.toBeInTheDocument());
   });
 
@@ -707,11 +734,20 @@ describe("MindLinker shell", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "对话 解释流式回答 正在生成" })).not.toBeInTheDocument());
   });
 
-  it("uses marked terms from the first model response before requesting explanations", async () => {
+  it("cleans legacy main-answer markers before extracting terms", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
       const isExplanationRequest = body.includes("待解释词表");
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-cross-entropy", term: "交叉熵" }] }) } }]
+          })
+        } as Response;
+      }
       return {
         ok: true,
         json: async () => ({
@@ -746,6 +782,8 @@ describe("MindLinker shell", () => {
 
     expect(await screen.findByText(/模型会通过/)).toBeInTheDocument();
     expect(screen.queryByText(/\[\[ml:/)).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("待解释词表"))).toBe(false);
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
     expect(screen.queryByRole("heading", { name: "交叉熵" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "解释 交叉熵" }));
@@ -761,7 +799,105 @@ describe("MindLinker shell", () => {
     expect(String(explanationCall?.[1]?.body ?? "")).toContain("上一阶段可见正文");
   });
 
-  it("sends strict nested marker grammar to the explanation model", async () => {
+  it("extracts terms after the plain main answer and requests grouped explanations", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
+      const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
+      const isExplanationRequest = body.includes("待解释词表");
+      const isTitleRequest = body.includes("项目标题生成任务");
+      if (isTitleRequest) {
+        return { ok: true, json: async () => ({ choices: [{ message: { content: "变长编码" } }] }) } as Response;
+      }
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    terms: [
+                      { id: "code-length", term: "码长" },
+                      { id: "prefix-code", term: "前缀码" },
+                      { id: "kraft-inequality", term: "Kraft 不等式" }
+                    ]
+                  })
+                }
+              }
+            ]
+          })
+        } as Response;
+      }
+      if (isExplanationRequest) {
+        const containsCodeLength = body.includes("code-length");
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify([
+                    containsCodeLength
+                      ? {
+                          id: "code-length",
+                          term: "码长",
+                          body: "码长是码字的长度。",
+                          source: "来源：当前回答"
+                        }
+                      : {
+                          id: "prefix-code",
+                          term: "前缀码",
+                          body: "前缀码不会让任何码字成为另一个码字的前缀，并常与 Kraft 不等式一起讨论。",
+                          source: "来源：当前回答"
+                        }
+                  ])
+                }
+              }
+            ]
+          })
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: "码长和前缀码是变长编码的核心概念，Kraft 不等式给出长度条件。" } }]
+        })
+      } as Response;
+    });
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+
+    await user.type(screen.getByLabelText("学习问题"), "讲变长编码");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    await waitFor(() => expect(screen.getByRole("article", { name: "回答正文" })).toHaveTextContent("码长和前缀码"));
+    expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("关键词抽取任务"))).toBe(false);
+    expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("待解释词表"))).toBe(false);
+    await user.click(screen.getByRole("button", { name: "生成解释链" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "解释 码长" })).toHaveClass("revealed"));
+    expect(screen.getByRole("button", { name: "解释 前缀码" })).toBeInTheDocument();
+    expect(screen.queryByText(/\[\[ml:/)).not.toBeInTheDocument();
+
+    const mainCall = fetchMock.mock.calls.find(([, init]) => String(init?.body ?? "").includes("主回复生成"));
+    const mainRequestText = JSON.parse(String(mainCall?.[1]?.body ?? "")).messages[0].content[0].text;
+    expect(mainRequestText).not.toContain("<explainable_marker_protocol>");
+    expect(mainRequestText).not.toContain("解释链");
+    expect(mainRequestText).not.toContain("[[ml:");
+
+    const termExtractionCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body ?? "").includes("关键词抽取任务"));
+    const explanationCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body ?? "").includes("待解释词表"));
+    expect(termExtractionCalls).toHaveLength(1);
+    expect(explanationCalls.length).toBeGreaterThanOrEqual(2);
+    expect(String(explanationCalls[0]?.[1]?.body ?? "")).not.toContain("解释正文 body 中如果确实出现");
+    expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("reason\":\"nested"))).toBe(false);
+  });
+
+  it("keeps automatic explanation requests free of nested marker protocol", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
@@ -801,6 +937,8 @@ describe("MindLinker shell", () => {
     await user.type(screen.getByLabelText("学习问题"), "讲 Jensen");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
 
+    await screen.findByText(/这里介绍/);
+    await startExplanationGeneration(user);
     await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("待解释词表"))).toBe(true));
     const explanationCall = fetchMock.mock.calls.find(([, init]) => String(init?.body ?? "").includes("待解释词表"));
     const requestText = JSON.parse(String(explanationCall?.[1]?.body ?? "")).messages[0].content;
@@ -810,16 +948,25 @@ describe("MindLinker shell", () => {
     expect(requestText).toContain("<json_output_protocol>");
     expect(requestText).toContain("<prohibitions>");
     expect(requestText).not.toContain("【任务】");
-    expect(requestText).toContain("裸 [[id]] 是非法格式");
-    expect(requestText).toContain("[[convex-function]]");
-    expect(requestText).toContain("[[ml:convex-function]]凸函数[[/ml]]");
+    expect(requestText).not.toContain("<explanation_body_marker_protocol>");
+    expect(requestText).not.toContain("[[ml:id]]");
+    expect(requestText).not.toContain("如果确实出现还值得继续解释的术语");
   });
 
   it("strips malformed closing explainable markers with ids from the rendered answer", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
       const isExplanationRequest = body.includes("待解释词表");
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "entropy", term: "entropy熵" }] }) } }]
+          })
+        } as Response;
+      }
       return {
         ok: true,
         json: async () => ({
@@ -854,6 +1001,7 @@ describe("MindLinker shell", () => {
 
     expect(await screen.findByText(/核心概念包括/)).toBeInTheDocument();
     expect(screen.queryByText(/\[\[\/ml:/)).not.toBeInTheDocument();
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 entropy熵" })).toHaveClass("revealed"));
 
     const explanationCall = fetchMock.mock.calls.find(([, init]) => {
@@ -863,11 +1011,19 @@ describe("MindLinker shell", () => {
     expect(String(explanationCall?.[1]?.body ?? "")).toContain("entropy");
   });
 
-  it("shows an explanation panel loading state while explanations are being generated", async () => {
+  it("shows an explanation panel loading state after the user starts explanation generation", async () => {
     const user = userEvent.setup();
     let explanationController: ReadableStreamDefaultController<Uint8Array> | null = null;
     vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      if (body.includes("关键词抽取任务")) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-entropy", term: "信息熵" }] }) } }]
+          })
+        } as Response;
+      }
       if (body.includes("待解释词表")) {
         return new Response(
           new ReadableStream<Uint8Array>({
@@ -903,26 +1059,26 @@ describe("MindLinker shell", () => {
     await user.type(screen.getByLabelText("学习问题"), "解释链等待态");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
 
+    await screen.findByText(/模型会解释/);
+    expect(explanationController).toBeNull();
+    await user.click(screen.getByRole("button", { name: "生成解释链" }));
     await waitFor(() => expect(explanationController).not.toBeNull());
     const explanationPanel = screen.getByRole("complementary", { name: "解释与来源" });
     expect(within(explanationPanel).getByRole("status", { name: "解释链生成中" })).toBeInTheDocument();
     expect(within(explanationPanel).getByText("正在生成解释链")).toBeInTheDocument();
   });
 
-  it("shows first-level explanations before nested explanation requests finish", async () => {
+  it("does not automatically request nested explanations after first-level explanations", async () => {
     const user = userEvent.setup();
-    let nestedController: ReadableStreamDefaultController<Uint8Array> | null = null;
     const fetchMock = vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
-      if (body.includes("term=概率分布")) {
-        return new Response(
-          new ReadableStream<Uint8Array>({
-            start(controller) {
-              nestedController = controller;
-            }
-          }),
-          { headers: { "Content-Type": "text/event-stream" }, status: 200 }
-        );
+      if (body.includes("关键词抽取任务")) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-cross-entropy", term: "交叉熵" }] }) } }]
+          })
+        } as Response;
       }
       if (body.includes("待解释词表")) {
         return {
@@ -969,16 +1125,16 @@ describe("MindLinker shell", () => {
     await user.type(screen.getByLabelText("学习问题"), "解释交叉熵");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
 
-    await waitFor(() => expect(nestedController).not.toBeNull());
+    await screen.findByText(/这里解释/);
+    expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("待解释词表"))).toBe(false);
+    await user.click(screen.getByRole("button", { name: "生成解释链" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
     expect(screen.queryByRole("heading", { name: "交叉熵" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "解释 交叉熵" }));
     expect(screen.getByRole("heading", { name: "交叉熵" })).toBeInTheDocument();
-    expect(within(screen.getByRole("complementary", { name: "解释与来源" })).getByText(/正在补充延伸解释/)).toBeInTheDocument();
-    expect(fetchMock.mock.calls.filter(([, init]) => String(init?.body ?? "").includes("待解释词表")).length).toBeGreaterThanOrEqual(2);
-
-    await act(async () => {
-      nestedController?.close();
-    });
+    expect(within(screen.getByRole("complementary", { name: "解释与来源" })).queryByText(/正在补充延伸解释/)).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([, init]) => String(init?.body ?? "").includes("待解释词表")).length).toBe(1);
+    expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("reason\":\"nested"))).toBe(false);
   });
 
   it("requests a project title in parallel from prompt and references before the main answer finishes", async () => {
@@ -1160,7 +1316,7 @@ describe("MindLinker shell", () => {
     expect(screen.getByRole("main", { name: "设置" })).toBeInTheDocument();
     expect(screen.queryByRole("main", { name: "主页" })).not.toBeInTheDocument();
     expect(screen.queryByRole("complementary", { name: "项目目录" })).not.toBeInTheDocument();
-    expect(screen.getByText("自定义兼容接口")).toBeInTheDocument();
+    expect(screen.getAllByText("自定义兼容接口").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("OpenAI")).not.toBeInTheDocument();
     expect(screen.queryByText("Anthropic")).not.toBeInTheDocument();
     expect(screen.queryByText("Ollama")).not.toBeInTheDocument();
@@ -1172,6 +1328,7 @@ describe("MindLinker shell", () => {
     expect(screen.getByLabelText("RAG Embedding 模型")).toBeInTheDocument();
     expect(screen.queryByText("RAG 索引")).not.toBeInTheDocument();
     expect(screen.queryByText("24 chunks")).not.toBeInTheDocument();
+    expect(screen.getAllByText("自定义兼容接口").length).toBeGreaterThanOrEqual(1);
 
     await user.click(screen.getByRole("button", { name: "返回" }));
 
@@ -1182,18 +1339,33 @@ describe("MindLinker shell", () => {
     const user = userEvent.setup();
     vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
       const isExplanationRequest = body.includes("待解释词表");
       const isTitleRequest = body.includes("项目标题生成任务");
-      const explanationJson = body.includes("term=概率分布")
-        ? JSON.stringify([
-            {
-              id: "term-probability-distribution",
-              term: "概率分布",
-              body: "概率分布来自模型解释，描述随机变量取值的概率安排。",
-              source: "来源：模型解释"
-            }
-          ])
-        : JSON.stringify([
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    terms: [
+                      { id: "term-cross-entropy", term: "交叉熵" },
+                      { id: "term-probability-distribution", term: "概率分布" }
+                    ]
+                  })
+                }
+              }
+            ]
+          })
+        } as Response;
+      }
+      const requestedCrossEntropy = body.includes("term-cross-entropy");
+      const requestedProbabilityDistribution = body.includes("term-probability-distribution");
+      const explanationJson = JSON.stringify([
+        ...(requestedCrossEntropy
+          ? [
             {
               id: "term-cross-entropy",
               term: "交叉熵",
@@ -1201,7 +1373,19 @@ describe("MindLinker shell", () => {
               source: "来源：模型解释",
               nested: ["概率分布"]
             }
-          ]);
+          ]
+          : []),
+        ...(requestedProbabilityDistribution
+          ? [
+              {
+                id: "term-probability-distribution",
+                term: "概率分布",
+                body: "概率分布来自模型解释，描述随机变量取值的概率安排。",
+                source: "来源：模型解释"
+              }
+            ]
+          : [])
+      ]);
       return {
         ok: true,
         json: async () => ({
@@ -1217,6 +1401,8 @@ describe("MindLinker shell", () => {
     await user.click(screen.getByRole("button", { name: "返回" }));
     await user.type(screen.getByLabelText("学习问题"), "解释交叉熵");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await screen.findByText(/这段回答介绍/);
+    await user.click(screen.getByRole("button", { name: "生成解释链" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
     expect(screen.queryByRole("heading", { name: "交叉熵" })).not.toBeInTheDocument();
 
@@ -1242,8 +1428,17 @@ describe("MindLinker shell", () => {
     const user = userEvent.setup();
     vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
       const isExplanationRequest = body.includes("待解释词表");
       const isTitleRequest = body.includes("项目标题生成任务");
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-convex", term: "凸函数" }] }) } }]
+          })
+        } as Response;
+      }
       const explanationJson = body.includes("term=熵")
         ? JSON.stringify([
             {
@@ -1277,6 +1472,7 @@ describe("MindLinker shell", () => {
     await user.click(screen.getByRole("button", { name: "返回" }));
     await user.type(screen.getByLabelText("学习问题"), "解释凸函数");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 凸函数" })).toHaveClass("revealed"));
     await user.click(screen.getByRole("button", { name: "解释 凸函数" }));
 
@@ -1291,8 +1487,17 @@ describe("MindLinker shell", () => {
     const user = userEvent.setup();
     vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
       const isExplanationRequest = body.includes("待解释词表");
       const isTitleRequest = body.includes("项目标题生成任务");
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-jensen", term: "Jensen不等式" }] }) } }]
+          })
+        } as Response;
+      }
       return {
         ok: true,
         json: async () => ({
@@ -1325,6 +1530,7 @@ describe("MindLinker shell", () => {
     await user.click(screen.getByRole("button", { name: "返回" }));
     await user.type(screen.getByLabelText("学习问题"), "解释 Jensen");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 Jensen不等式" })).toHaveClass("revealed"));
     await user.click(screen.getByRole("button", { name: "解释 Jensen不等式" }));
 
@@ -1353,6 +1559,7 @@ describe("MindLinker shell", () => {
     await user.type(screen.getByLabelText("学习问题"), "解释信息量");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
 
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 信息量" })).toHaveClass("revealed"));
     expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument();
     expect(screen.getByText(/就越大/).closest("strong")).toBeInTheDocument();
@@ -1377,6 +1584,7 @@ describe("MindLinker shell", () => {
     await user.type(screen.getByLabelText("学习问题"), "解释 Jensen");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
 
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 Jensen 不等式" })).toHaveClass("revealed"));
     await user.click(screen.getByRole("button", { name: "解释 Jensen 不等式" }));
     expect(screen.getByRole("heading", { name: "Jensen不等式" })).toBeInTheDocument();
@@ -1438,8 +1646,17 @@ describe("MindLinker shell", () => {
     const user = userEvent.setup();
     vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
       const isExplanationRequest = body.includes("待解释词表");
       const isTitleRequest = body.includes("项目标题生成任务");
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-jensen", term: "Jensen不等式" }] }) } }]
+          })
+        } as Response;
+      }
       return {
         ok: true,
         json: async () => ({
@@ -1473,6 +1690,7 @@ describe("MindLinker shell", () => {
 
     await user.type(screen.getByLabelText("学习问题"), "解释 Jensen");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 Jensen不等式" })).toHaveClass("revealed"));
     await user.click(screen.getByRole("button", { name: "解释 Jensen不等式" }));
 
@@ -1487,8 +1705,17 @@ describe("MindLinker shell", () => {
     const user = userEvent.setup();
     vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
       const isExplanationRequest = body.includes("待解释词表");
       const isTitleRequest = body.includes("项目标题生成任务");
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-kl", term: "KL散度" }] }) } }]
+          })
+        } as Response;
+      }
       return {
         ok: true,
         json: async () => ({
@@ -1522,6 +1749,7 @@ describe("MindLinker shell", () => {
 
     await user.type(screen.getByLabelText("学习问题"), "解释 KL");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 KL散度" })).toHaveClass("revealed"));
     await user.click(screen.getByRole("button", { name: "解释 KL散度" }));
 
@@ -1537,8 +1765,17 @@ describe("MindLinker shell", () => {
     } as Selection);
     vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
       const isExplanationRequest = body.includes("待解释词表");
       const isTitleRequest = body.includes("项目标题生成任务");
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-cross-entropy", term: "交叉熵" }] }) } }]
+          })
+        } as Response;
+      }
       const explanationJson = body.includes("term=概率分布")
         ? JSON.stringify([
             {
@@ -1578,6 +1815,7 @@ describe("MindLinker shell", () => {
 
     await user.type(screen.getByLabelText("学习问题"), "解释交叉熵");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
     await user.click(screen.getByRole("button", { name: "解释 交叉熵" }));
 
@@ -1598,8 +1836,17 @@ describe("MindLinker shell", () => {
     const user = userEvent.setup();
     vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
       const isExplanationRequest = body.includes("待解释词表");
       const isTitleRequest = body.includes("项目标题生成任务");
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-chain-rule", term: "链式法则" }] }) } }]
+          })
+        } as Response;
+      }
       const longFormula = "P(x_1,x_2,x_3,x_4,x_5,x_6,x_7,x_8,x_9,x_{10})=\\prod_{i=1}^{10}P(x_i|x_1,\\ldots,x_{i-1})";
       return {
         ok: true,
@@ -1634,6 +1881,7 @@ describe("MindLinker shell", () => {
     await user.click(screen.getByRole("button", { name: "返回" }));
     await user.type(screen.getByLabelText("学习问题"), "解释链式法则");
     await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 链式法则" })).toHaveClass("revealed"));
     await user.click(screen.getByRole("button", { name: "解释 链式法则" }));
 
@@ -2046,6 +2294,14 @@ describe("MindLinker shell", () => {
     let answerController: ReadableStreamDefaultController<Uint8Array> | null = null;
     vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
       const body = String(init?.body ?? "");
+      if (body.includes("关键词抽取任务")) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-cross-entropy", term: "交叉熵" }] }) } }]
+          })
+        } as Response;
+      }
       if (body.includes("待解释词表")) {
         return {
           ok: true,
@@ -2122,6 +2378,9 @@ describe("MindLinker shell", () => {
     await user.click(screen.getByRole("button", { name: "对话 分类损失" }));
 
     expect(screen.getByText(/后台生成完成的回答/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成解释链" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "解释 交叉熵" })).not.toBeInTheDocument();
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
     expect(screen.queryByRole("heading", { name: "交叉熵" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "解释 交叉熵" }));
@@ -2548,8 +2807,12 @@ describe("MindLinker shell", () => {
     expect(screen.queryByRole("button", { name: "展示回答" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "逐个渲染批注" })).not.toBeInTheDocument();
 
+    await screen.findByText(/这是重新生成的示例主回复/);
+    expect(screen.getByRole("button", { name: "生成解释链" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "解释 交叉熵" })).not.toBeInTheDocument();
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
-    expect(screen.getByRole("status")).toHaveTextContent(/解释链生成完成|已生成第一层解释/);
+    expect(screen.getByRole("status")).toHaveTextContent("解释链生成完成");
   });
 
   it("records model replies and explanation parsing in the runtime log", async () => {
@@ -2573,6 +2836,8 @@ describe("MindLinker shell", () => {
     await user.type(screen.getByLabelText("新对话提示词"), "测试运行日志");
     await user.click(screen.getByRole("button", { name: "创建对话" }));
 
+    await screen.findByText(/日志测试主回复/);
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
 
     const runtimeLogs = JSON.parse(window.localStorage.getItem("mindlinker.runtimeLogs") ?? "[]");
@@ -2611,6 +2876,7 @@ describe("MindLinker shell", () => {
     await user.type(screen.getByLabelText("新对话提示词"), "讲解信息论不等式");
     await user.click(screen.getByRole("button", { name: "创建对话" }));
 
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 熵" })).toHaveClass("revealed"));
     expect(screen.getByRole("button", { name: "解释 KL 散度" })).toHaveClass("revealed");
 
@@ -2642,6 +2908,7 @@ describe("MindLinker shell", () => {
     await user.type(screen.getByLabelText("新对话提示词"), "解释互信息");
     await user.click(screen.getByRole("button", { name: "创建对话" }));
 
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 互信息" })).toHaveClass("revealed"));
     await user.click(screen.getByRole("button", { name: "解释 互信息" }));
     expect(screen.getByText("互信息刻画两个随机变量共享的信息量。")).toBeInTheDocument();
@@ -2754,6 +3021,47 @@ describe("MindLinker shell", () => {
     await user.click(screen.getByRole("button", { name: "删除供应商 课程实验网关" }));
 
     expect(screen.queryByDisplayValue("custom-chat-model")).not.toBeInTheDocument();
+  });
+
+  it("lets users choose the active provider used for model requests", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(window, "fetch").mockImplementation(async (input, init) => {
+      const body = String(init?.body ?? "");
+      if (body.includes("关键词抽取任务")) {
+        return { ok: true, json: async () => ({ choices: [{ message: { content: "[]" } }] }) } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: String(input).includes("gateway.local") ? "来自第二供应商的回答。" : "来自第一供应商的回答。" } }]
+        })
+      } as Response;
+    });
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://first.local/v1");
+    await user.click(screen.getByRole("button", { name: "添加自定义供应商" }));
+    const providerNameInput = screen.getByDisplayValue("自定义供应商");
+    await user.clear(providerNameInput);
+    await user.type(providerNameInput, "第二供应商");
+    await user.clear(screen.getByLabelText(/供应商 provider-.* Base URL/));
+    await user.type(screen.getByLabelText(/供应商 provider-.* Base URL/), "https://gateway.local/v1");
+    const secondModelInput = await screen.findByDisplayValue("custom-chat-model");
+    await user.clear(secondModelInput);
+    await user.type(secondModelInput, "second-main");
+    await user.selectOptions(screen.getByLabelText("当前使用供应商"), "第二供应商");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+
+    await user.type(screen.getByLabelText("学习问题"), "测试供应商选择");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    await screen.findByText("来自第二供应商的回答。");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://gateway.local/v1/chat/completions",
+      expect.anything()
+    );
   });
 
   it("lets custom providers choose between OpenAI compatible and Responses API formats", async () => {
@@ -3066,6 +3374,7 @@ describe("MindLinker shell", () => {
     render(<App />);
     await enterWorkspace(user);
 
+    await startExplanationGeneration(user);
     await waitFor(() => expect(screen.getByRole("button", { name: "解释 Jensen 不等式" })).toHaveClass("revealed"));
     await user.click(screen.getByRole("button", { name: "解释 Jensen 不等式" }));
     expect(screen.getByRole("heading", { name: "Jensen不等式" })).toBeInTheDocument();

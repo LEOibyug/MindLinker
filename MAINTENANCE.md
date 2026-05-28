@@ -208,3 +208,19 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "marker|markers|explanation text|explanation links|malformed|unclosed|streaming visible|formula|math|list items"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - Manual Explanation Chain Generation
+
+- Removed explanation-chain and marker instructions from the main-answer prompt so the first model call only generates user-visible Markdown.
+- Stopped automatic keyword extraction and explanation generation after main answers finish, including conversations that complete in the background.
+- Added a reader toolbar button for users to explicitly run keyword extraction and grouped explanation requests.
+- Kept manual selection explanations available, without automatic recursive explanation generation.
+- Added active provider selection coverage so main answers, extraction, explanations, and rewrites use the currently selected custom provider.
+- Regression coverage:
+  - main-answer prompts do not mention explanation chains or `[[ml:...]]` markers;
+  - explanation generation starts only after clicking the reader button;
+  - background conversations finish the main answer without auto-generating explanation links;
+  - explanation cards still render formulas, malformed-marker cleanup, manual selected explanations, and persisted links.
+- Verification:
+  - `npm test`
+  - `npm run build`

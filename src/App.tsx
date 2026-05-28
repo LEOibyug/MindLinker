@@ -8,6 +8,7 @@ import {
   Loader2,
   MessageSquarePlus,
   Network,
+  Sparkles,
   PencilLine,
   Plus,
   Paperclip,
@@ -375,8 +376,14 @@ const rewriteReferences = [
 const isUsableChatProvider = (provider: ProviderConfig) =>
   provider.baseUrl.trim() && !provider.baseUrl.includes("api.example.com");
 
-const findChatModelConfig = (providers: ProviderConfig[]) => {
-  for (const provider of providers) {
+const findChatModelConfig = (providers: ProviderConfig[], activeProviderId?: string) => {
+  const orderedProviders = activeProviderId
+    ? [
+        ...providers.filter((provider) => provider.id === activeProviderId),
+        ...providers.filter((provider) => provider.id !== activeProviderId)
+      ]
+    : providers;
+  for (const provider of orderedProviders) {
     const model =
       provider.models.find((item) => item.role === "main" && item.name.trim()) ??
       provider.models.find((item) => item.capability !== "embedding" && item.name.trim()) ??
@@ -386,6 +393,14 @@ const findChatModelConfig = (providers: ProviderConfig[]) => {
     }
   }
   return null;
+};
+
+const chunkMarkedTerms = (terms: MarkedTerm[], size = 2) => {
+  const chunks: MarkedTerm[][] = [];
+  for (let index = 0; index < terms.length; index += size) {
+    chunks.push(terms.slice(index, index + size));
+  }
+  return chunks;
 };
 
 const buildProviderHeaders = (provider: ProviderConfig) => ({
@@ -412,16 +427,6 @@ const answerModePrompts: Record<AnswerMode, { label: string; instruction: string
 };
 
 const promptProtocolHeader = "MindLinker Prompt Protocol v1";
-
-const explainableMarkerProtocol = `<explainable_marker_protocol>
-- 只允许使用 [[ml:stable-english-id]]术语[[/ml]]。
-- 结束标签必须永远是 [[/ml]]，严禁写成 [[/ml:stable-english-id]] 或任何带 id 的结束标签。
-- id 只使用小写英文、数字和连字符，每个可解释点使用语义化且尽量唯一的 id，不要复用 stable-english-id 这个示例 id。
-- 正确示例：[[ml:cross-entropy]]交叉熵[[/ml]] 会衡量两个分布的差异。
-- 错误示例：[[ml:cross-entropy]]交叉熵[[/ml:cross-entropy]]。
-- 错误示例：[[convex-function]]。裸 [[id]] 是非法格式；如果要标记凸函数，必须写成 [[ml:convex-function]]凸函数[[/ml]]。
-- 同一位置一个标记，不要跨句标记，不要标记整段句子。
-</explainable_marker_protocol>`;
 
 const mathFormulaProtocol = `<math_formula_protocol>
 - 数学公式使用 LaTeX。
@@ -998,11 +1003,8 @@ const requestChatCompletion = async (
 <output_format>
 - 输出只包含给用户看的主回复正文。
 - 直接进入实质内容或合适的标题。
-- 请主动为关键词、专有名词、理论概念、定理、公式名、符号含义、方法名和容易产生误解的短语添加解释标记。
-- 不要漏掉正文中的核心概念，宁可多标几个可解释点。
+- 使用自然 Markdown 与 LaTeX 组织正文。
 </output_format>
-
-${explainableMarkerProtocol}
 
 ${mathFormulaProtocol}
 
@@ -1136,6 +1138,136 @@ const extractTextFromModelPayload = (payload: any) => {
   return "";
 };
 
+const parseTermExtractionJson = (text: string): MarkedTerm[] => {
+  const jsonText = text
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  try {
+    const parsed = JSON.parse(jsonText) as unknown;
+    const rawItems = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object" && Array.isArray((parsed as { terms?: unknown }).terms)
+        ? (parsed as { terms: unknown[] }).terms
+        : [];
+    const seen = new Set<string>();
+    return rawItems
+      .map((item, index) => {
+        if (!item || typeof item !== "object") {
+          return null;
+        }
+        const record = item as { id?: unknown; term?: unknown; label?: unknown; name?: unknown };
+        const rawTerm =
+          typeof record.term === "string" && record.term.trim()
+            ? record.term.trim()
+            : typeof record.label === "string" && record.label.trim()
+              ? record.label.trim()
+              : typeof record.name === "string" && record.name.trim()
+                ? record.name.trim()
+                : "";
+        if (!rawTerm) {
+          return null;
+        }
+        const key = normalizeTermForMatch(rawTerm);
+        if (!key || seen.has(key)) {
+          return null;
+        }
+        seen.add(key);
+        const id = typeof record.id === "string" && record.id.trim()
+          ? record.id.trim()
+          : normalizeMarkedTermId("extracted", rawTerm, index + 1);
+        return { id, term: rawTerm, ordinal: seen.size };
+      })
+      .filter((term): term is MarkedTerm => Boolean(term))
+      .slice(0, 12)
+      .map((term, index) => ({ ...term, ordinal: index + 1 }));
+  } catch {
+    return [];
+  }
+};
+
+const requestExplainableTerms = async (
+  answer: string,
+  documents: ParsedReferenceDocument[],
+  provider: ProviderConfig,
+  model: ModelConfig,
+  runtimeContext: Record<string, unknown> = {}
+) => {
+  const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+  const endpoint =
+    provider.apiFormat === "openai-responses"
+      ? `${baseUrl.endsWith("/responses") ? baseUrl : `${baseUrl}/responses`}`
+      : `${baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`}`;
+  const referenceContext = buildReferenceContext(documents).slice(0, 12_000);
+  const prompt = `${promptProtocolHeader}
+
+<task>关键词抽取任务</task>
+
+<instruction>
+请阅读主回复和参考材料，梳理适合生成解释链的关键词、专有名词、理论概念、定理、公式名、符号含义、方法名和容易误解的短语。只抽取主回复中实际出现、用户点击后值得进一步了解的词语。
+</instruction>
+
+<input>
+主回复：
+${answer}
+
+参考材料：
+${referenceContext || "无"}
+</input>
+
+<json_output_protocol>
+{
+  "terms": [
+    {"id":"semantic-english-id","term":"主回复中出现的原词"}
+  ]
+}
+</json_output_protocol>
+
+<prohibitions>
+- 不要输出 JSON 之外的说明文字。
+- 不要抽取主回复中没有出现的词。
+- 不要输出解释正文。
+- 不要输出 [[ml:id]] 或任何解释链标记。
+- id 使用小写英文、数字和连字符，term 保持主回复中的显示文字。
+</prohibitions>`;
+  appendRuntimeLog("model", "关键词抽取请求开始", {
+    ...runtimeContext,
+    provider: provider.name,
+    model: model.name,
+    apiFormat: provider.apiFormat,
+    endpoint,
+    answerLength: answer.length
+  });
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: buildProviderHeaders(provider),
+    body: JSON.stringify(
+      provider.apiFormat === "openai-responses"
+        ? {
+            model: model.name,
+            input: prompt
+          }
+        : {
+            model: model.name,
+            messages: [{ role: "user", content: prompt }]
+          }
+    )
+  });
+  if (!response.ok) {
+    appendRuntimeLog("model", "关键词抽取请求失败", { ...runtimeContext, status: response.status, statusText: response.statusText }, "error");
+    throw new Error(`关键词抽取失败：${response.status} ${response.statusText}`);
+  }
+  const rawText = extractTextFromModelPayload(await response.json());
+  const parsed = parseTermExtractionJson(rawText);
+  appendRuntimeLog("model", "关键词抽取解析完成", {
+    ...runtimeContext,
+    rawText,
+    parsedCount: parsed.length,
+    terms: parsed.map((term) => ({ id: term.id, term: term.term, ordinal: term.ordinal }))
+  });
+  return parsed;
+};
+
 const parseExplanationJson = (text: string, referenceState: string): Explanation[] => {
   const jsonText = text
     .replace(/^```(?:json)?/i, "")
@@ -1185,7 +1317,7 @@ const requestExplanationChain = async (
     .join("\n");
   const nestedMarkerInstruction = options.allowNestedMarkers
     ? "解释正文 body 中如果确实出现还值得继续解释的术语，请使用 [[ml:stable-english-id]]术语[[/ml]] 标记；结束标签必须严格为 [[/ml]]，严禁写成 [[/ml:id]]；裸 [[id]] 是非法格式，例如 [[convex-function]] 是错误写法，如果要标记凸函数，必须写成 [[ml:convex-function]]凸函数[[/ml]]；id 使用语义化英文小写短横线，不要复用 stable-english-id 这个示例 id；不要超过必要数量。"
-    : "解释正文 body 中不要再生成任何 [[ml:id]]...[[/ml]] 待解释标记。";
+    : "";
   const prompt = `${promptProtocolHeader}
 
 <task>
@@ -1213,9 +1345,7 @@ ${termList}
 ]
 </json_output_protocol>
 
-<explainable_marker_protocol>
-${nestedMarkerInstruction}
-</explainable_marker_protocol>
+${nestedMarkerInstruction ? `<explanation_body_marker_protocol>\n${nestedMarkerInstruction}\n</explanation_body_marker_protocol>` : ""}
 
 <prohibitions>
 - 不要输出 JSON 之外的说明文字。
@@ -1954,6 +2084,9 @@ export function App() {
   const [customProviders, setCustomProvidersState] = useState<ProviderConfig[]>(() =>
     readStoredValue("mindlinker.providers", providerConfigs)
   );
+  const [activeProviderIdState, setActiveProviderIdState] = useState(() =>
+    readStoredValue("mindlinker.activeProviderId", providerConfigs[0]?.id ?? "")
+  );
   const [activeProjectId, setActiveProjectId] = useState(localProjects[0]?.id ?? "");
   const [activeConversationId, setActiveConversationId] = useState(localProjects[0]?.conversations[0]?.id ?? "");
   const [projectTitles, setProjectTitles] = useState<Record<string, string>>(
@@ -1989,6 +2122,9 @@ export function App() {
     activeProject.conversations[0] ??
     emptyConversation;
   const activeProjectTitle = projectTitles[activeProject.id] ?? activeProject.title;
+  const activeProviderId = customProviders.some((provider) => provider.id === activeProviderIdState)
+    ? activeProviderIdState
+    : customProviders[0]?.id ?? "";
   const activeDocumentIds = includedDocumentIds[activeProject.id] ?? activeProject.documents;
   const sampleReferences = useMemo<ParsedReferenceDocument[]>(() => [], []);
   const allDocuments = useMemo(() => [...sampleReferences, ...parsedReferences], [parsedReferences, sampleReferences]);
@@ -2148,7 +2284,7 @@ export function App() {
   ) => {
     let foregroundGeneration = foregroundOnStart;
     const shouldUpdateVisibleConversation = () => foregroundGeneration || isConversationVisible(conversationId, projectId);
-    const chatConfig = findChatModelConfig(customProviders);
+    const chatConfig = findChatModelConfig(customProviders, activeProviderId);
     if (!chatConfig) {
       markDraftNeedsConfiguration(conversationId, draft, projectId, foregroundOnStart);
       return;
@@ -2157,9 +2293,6 @@ export function App() {
     const projectSnapshot = localProjects.find((project) => project.id === projectId);
     const conversationSnapshot = projectSnapshot?.conversations.find((conversation) => conversation.id === conversationId);
     const isFirstProjectConversation = !projectSnapshot || projectSnapshot.conversations[0]?.id === conversationId;
-    const targetReferenceState =
-      conversationSnapshot?.referenceState ??
-      (documents.length > 0 ? `refs:${documents.map((document) => document.id).join("+")}` : "refs:empty");
     const applyGeneratedTitle = (title: string) => {
       const cleanTitle = sanitizeProjectTitle(title);
       if (!cleanTitle) {
@@ -2271,109 +2404,28 @@ export function App() {
         waitForMinimumGenerationFrame()
       ]);
       const parsedAnswer = parseMarkedAnswer(answerMarkdown);
-      const explanationTerms = parsedAnswer.terms.length > 0 ? parsedAnswer.terms : buildFallbackMarkedTerms(parsedAnswer.cleanMarkdown);
-      appendRuntimeLog("model", "主回复标记解析完成", {
-        ...runtimeContext,
-        markerCount: parsedAnswer.terms.length,
-        fallbackTermCount: parsedAnswer.terms.length > 0 ? 0 : explanationTerms.length,
-        terms: explanationTerms.map((term) => ({ id: term.id, term: term.term, ordinal: term.ordinal }))
-      });
+      const cleanAnswer = parsedAnswer.cleanMarkdown;
       const completedDraft = completeConversationDraft({
         ...draft,
-        answerMarkdown: parsedAnswer.cleanMarkdown,
-        explanationTerms,
+        answerMarkdown: cleanAnswer,
+        explanationTerms: [],
         modelStatus: "generated"
       });
       setStoredConversationDrafts((drafts) => ({ ...drafts, [conversationId]: completedDraft }));
-      markConversationRunning(conversationId, "generating-annotations");
+      setConversationExplanations((items) => ({ ...items, [conversationId]: items[conversationId] ?? [] }));
       if (shouldUpdateVisibleConversation()) {
-        setGenerationPhase("annotations");
-        setNotice("已生成正文，正在生成解释链");
+        setVisibleConversationDrafts((drafts) => ({ ...drafts, [conversationId]: completedDraft }));
+        setAvailableExplanations([]);
+        setExplanationStack([]);
+        setAnnotationsRevealed(false);
+        setGenerationPhase("ready");
+        setNotice("回答已生成");
       }
       foregroundGeneration = false;
       logDebugMessage("模型主回复生成完成");
       void titlePromise;
-      try {
-        const explanations = await requestExplanationChain(
-          parsedAnswer.cleanMarkdown,
-          explanationTerms,
-          documents,
-          chatConfig.provider,
-          chatConfig.model,
-          targetReferenceState,
-          { allowNestedMarkers: true, reason: "answer" },
-          runtimeContext
-        );
-        const nestedTermsByExplanation = explanations.map((explanation, explanationIndex) =>
-          parseMarkedAnswer(explanation.body).terms.map((term, termIndex) => ({
-            ...term,
-            ordinal: explanationIndex * 10 + termIndex + 1
-          }))
-        );
-        const nestedMarkedTerms = nestedTermsByExplanation.flat();
-        const cleanedExplanations = bindExplanationsToMarkedTerms(
-          explanations.map((explanation) => ({
-            ...explanation,
-            body: stripExplainableMarkers(explanation.body),
-            nested: Array.from(new Set([...explanation.nested, ...parseMarkedAnswer(explanation.body).terms.map((term) => term.term)]))
-          })),
-          explanationTerms
-        );
-        if (cleanedExplanations.length > 0) {
-          setConversationExplanations((items) => ({ ...items, [conversationId]: cleanedExplanations }));
-        }
-        if (cleanedExplanations.length > 0) {
-          if (shouldUpdateVisibleConversation()) {
-            setAvailableExplanations(cleanedExplanations);
-            setExplanationStack([]);
-            setAnnotationsRevealed(true);
-            setNotice(nestedMarkedTerms.length > 0 ? "已生成第一层解释，正在补充延伸解释" : "解释链生成完成");
-          }
-        }
-        const nestedExplanations =
-          nestedMarkedTerms.length > 0
-            ? await requestExplanationChain(
-                cleanedExplanations.map((explanation) => `${explanation.term}: ${explanation.body}`).join("\n\n"),
-                nestedMarkedTerms,
-                documents,
-                chatConfig.provider,
-                chatConfig.model,
-                targetReferenceState,
-                { allowNestedMarkers: false, reason: "nested" },
-                runtimeContext
-              )
-            : [];
-        const nestedByTerm = new Map(nestedExplanations.map((explanation) => [explanation.term, explanation]));
-        const explanationsWithNested = cleanedExplanations.map((explanation) => ({
-          ...explanation,
-          nestedExplanations: explanation.nested.map((term) => nestedByTerm.get(term)).filter((item): item is Explanation => Boolean(item))
-        }));
-        const allModelExplanations = [...explanationsWithNested, ...nestedExplanations];
-        if (shouldUpdateVisibleConversation()) {
-          setAvailableExplanations(allModelExplanations);
-          setExplanationStack([]);
-          setAnnotationsRevealed(allModelExplanations.length > 0);
-        }
-        setConversationExplanations((items) => ({ ...items, [conversationId]: allModelExplanations }));
-        logDebugMessage(
-          cleanedExplanations.length + nestedExplanations.length > 0
-            ? `解释链生成完成：${cleanedExplanations.length + nestedExplanations.length} 项`
-            : "解释链为空"
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setConversationExplanations((items) => (items[conversationId]?.length ? { ...items, [conversationId]: [] } : items));
-        if (shouldUpdateVisibleConversation()) {
-          setAvailableExplanations([]);
-          setExplanationStack([]);
-        }
-        logDebugMessage(message);
-      }
       markConversationSettled(conversationId, "ready");
       delete streamingLogStateRef.current[conversationId];
-      if (shouldUpdateVisibleConversation()) {
-        setGenerationPhase("ready");
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setStoredConversationDrafts((drafts) => ({
@@ -2396,6 +2448,128 @@ export function App() {
     }
   };
 
+  const generateExplanationsForConversation = async (
+    conversationId: string = activeConversation.id,
+    projectId: string = activeProject.id,
+    documents: ParsedReferenceDocument[] = projectDocuments,
+    draft: ConversationDraft | null = activeDraft,
+    referenceState: string = activeConversation.referenceState
+  ) => {
+    if (!draft?.answerMarkdown.trim()) {
+      setNotice("当前回答为空，无法生成解释链");
+      return;
+    }
+    if (runningConversationIds.includes(conversationId)) {
+      setNotice("当前对话仍在生成中，请稍后再试");
+      return;
+    }
+    const chatConfig = findChatModelConfig(customProviders, activeProviderId);
+    if (!chatConfig) {
+      setNotice("请在设置中配置可用的主模型 API");
+      return;
+    }
+    const shouldUpdateVisibleConversation = () => isConversationVisible(conversationId, projectId);
+    const parsedAnswer = parseMarkedAnswer(draft.answerMarkdown);
+    const cleanAnswer = parsedAnswer.cleanMarkdown;
+    const runtimeContext = {
+      projectId,
+      conversationId,
+      conversationTitle: draft.title
+    };
+
+    markConversationRunning(conversationId, "generating-annotations");
+    if (shouldUpdateVisibleConversation()) {
+      setGenerationPhase("annotations");
+      setNotice("正在生成解释链");
+      setExplanationStack([]);
+    }
+
+    try {
+      const extractedTerms = await requestExplainableTerms(
+        cleanAnswer,
+        documents,
+        chatConfig.provider,
+        chatConfig.model,
+        runtimeContext
+      );
+      const explanationTerms =
+        extractedTerms.length > 0
+          ? extractedTerms
+          : parsedAnswer.terms.length > 0
+            ? parsedAnswer.terms
+            : buildFallbackMarkedTerms(cleanAnswer);
+      appendRuntimeLog("model", "解释词表确定", {
+        ...runtimeContext,
+        extractedTermCount: extractedTerms.length,
+        legacyMarkerTermCount: extractedTerms.length > 0 ? 0 : parsedAnswer.terms.length,
+        fallbackTermCount: extractedTerms.length > 0 || parsedAnswer.terms.length > 0 ? 0 : explanationTerms.length,
+        terms: explanationTerms.map((term) => ({ id: term.id, term: term.term, ordinal: term.ordinal }))
+      });
+      setStoredConversationDrafts((drafts) => ({
+        ...drafts,
+        [conversationId]: {
+          ...(drafts[conversationId] ?? draft),
+          answerMarkdown: cleanAnswer,
+          explanationTerms
+        }
+      }));
+      if (explanationTerms.length === 0) {
+        setConversationExplanations((items) => ({ ...items, [conversationId]: [] }));
+        if (shouldUpdateVisibleConversation()) {
+          setAvailableExplanations([]);
+          setAnnotationsRevealed(false);
+          setNotice("没有找到适合解释的关键词");
+        }
+        return;
+      }
+
+      const explanationGroups = chunkMarkedTerms(explanationTerms);
+      const groupedExplanations = await Promise.all(
+        explanationGroups.map((termGroup, groupIndex) =>
+          requestExplanationChain(
+            cleanAnswer,
+            termGroup,
+            documents,
+            chatConfig.provider,
+            chatConfig.model,
+            referenceState,
+            { allowNestedMarkers: false, reason: "answer" },
+            { ...runtimeContext, explanationGroup: groupIndex + 1, explanationGroupCount: explanationGroups.length }
+          )
+        )
+      );
+      const cleanedExplanations = bindExplanationsToMarkedTerms(
+        groupedExplanations.flat().map((explanation) => ({
+          ...explanation,
+          body: stripExplainableMarkers(explanation.body),
+          nested: []
+        })),
+        explanationTerms
+      );
+      setConversationExplanations((items) => ({ ...items, [conversationId]: cleanedExplanations }));
+      if (shouldUpdateVisibleConversation()) {
+        setAvailableExplanations(cleanedExplanations);
+        setExplanationStack([]);
+        setAnnotationsRevealed(cleanedExplanations.length > 0);
+        setNotice(cleanedExplanations.length > 0 ? "解释链生成完成" : "解释链为空");
+      }
+      logDebugMessage(
+        cleanedExplanations.length > 0
+          ? `解释链生成完成：${cleanedExplanations.length} 项`
+          : "解释链为空"
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setNotice(message);
+      logDebugMessage(message);
+    } finally {
+      markConversationSettled(conversationId, "ready");
+      if (shouldUpdateVisibleConversation()) {
+        setGenerationPhase("ready");
+      }
+    }
+  };
+
   const setLocalProjects = (updater: LearningProject[] | ((projects: LearningProject[]) => LearningProject[])) => {
     setLocalProjectsState((projects) => {
       const nextProjects = typeof updater === "function" ? updater(projects) : updater;
@@ -2410,6 +2584,11 @@ export function App() {
       writeStoredValue("mindlinker.providers", nextProviders);
       return nextProviders;
     });
+  };
+
+  const setActiveProviderId = (providerId: string) => {
+    setActiveProviderIdState(providerId);
+    writeStoredValue("mindlinker.activeProviderId", providerId);
   };
 
   const setRagEnabled = (enabled: boolean) => {
@@ -2877,6 +3056,12 @@ export function App() {
       setNotice("至少需要保留一个供应商配置");
       return;
     }
+    if (activeProviderId === providerId) {
+      const nextProvider = customProviders.find((provider) => provider.id !== providerId);
+      if (nextProvider) {
+        setActiveProviderId(nextProvider.id);
+      }
+    }
     setCustomProviders((providers) => providers.filter((provider) => provider.id !== providerId));
     setNotice("已删除供应商配置");
   };
@@ -3027,7 +3212,7 @@ export function App() {
     }
     const selectedText = contextMenu.selectedText;
     setContextMenu(null);
-    const chatConfig = findChatModelConfig(customProviders);
+    const chatConfig = findChatModelConfig(customProviders, activeProviderId);
     if (!chatConfig) {
       setNotice("请在设置中配置可用的主模型 API");
       return;
@@ -3323,7 +3508,7 @@ export function App() {
       setNotice("请输入要提问的内容");
       return;
     }
-    const chatConfig = findChatModelConfig(customProviders);
+    const chatConfig = findChatModelConfig(customProviders, activeProviderId);
     if (!chatConfig) {
       setNotice("请在设置中配置可用的主模型 API");
       return;
@@ -3430,7 +3615,7 @@ export function App() {
   };
 
   const rewriteExplanation = async (term: string) => {
-    const chatConfig = findChatModelConfig(customProviders);
+    const chatConfig = findChatModelConfig(customProviders, activeProviderId);
     if (!chatConfig) {
       setNotice("请在设置中配置可用的主模型 API");
       return;
@@ -3449,7 +3634,7 @@ export function App() {
         chatConfig.provider,
         chatConfig.model,
         activeReferencePlan?.impacts.find((impact) => impact.term === term)?.nextReferenceState ?? activeConversation.referenceState,
-        { allowNestedMarkers: true, reason: "manual" },
+        { allowNestedMarkers: false, reason: "manual" },
         {
           projectId: activeProject.id,
           conversationId: activeConversation.id,
@@ -3465,7 +3650,7 @@ export function App() {
       const cleanedExplanation = {
         ...nextExplanation,
         body: stripExplainableMarkers(nextExplanation.body),
-        nested: Array.from(new Set([...nextExplanation.nested, ...parseMarkedAnswer(nextExplanation.body).terms.map((item) => item.term)]))
+        nested: nextExplanation.nested
       };
       setConversationExplanations((items) => ({
         ...items,
@@ -3555,6 +3740,23 @@ export function App() {
             </header>
             <div className="settings-layout">
               <section className="settings-main-panel" aria-label="模型供应商">
+                <div className="active-provider-panel">
+                  <label className="settings-field">
+                    <span>当前使用供应商</span>
+                    <select
+                      aria-label="当前使用供应商"
+                      value={activeProviderId}
+                      onChange={(event) => setActiveProviderId(event.target.value)}
+                    >
+                      {customProviders.map((provider) => (
+                        <option key={provider.id} value={provider.id}>
+                          {provider.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <small>回答、关键词抽取、解释和重写都会优先使用当前供应商的主模型。</small>
+                </div>
                 <div className="settings-section-title">
                   <div>
                     <h3>供应商</h3>
@@ -4063,6 +4265,17 @@ export function App() {
               <span>在当前回复、解释和来源中搜索</span>
             </div>
             <div className="view-actions">
+              {viewMode === "reader" && activeDraft?.modelStatus === "generated" && activeDraft.answerMarkdown.trim() ? (
+                <button
+                  className="icon-text-button explain-action"
+                  type="button"
+                  disabled={activeConversationRunning}
+                  onClick={() => void generateExplanationsForConversation()}
+                >
+                  <Sparkles aria-hidden="true" size={16} />
+                  {activeConversationExplanations.length > 0 ? "更新解释链" : "生成解释链"}
+                </button>
+              ) : null}
               <button
                 className={`icon-text-button ${viewMode === "reader" ? "active" : ""}`}
                 type="button"

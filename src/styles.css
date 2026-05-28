@@ -865,11 +865,17 @@ h3 {
 .view-actions {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
 .icon-text-button.active {
   border-color: #315fbb;
   color: #315fbb;
+}
+
+.icon-text-button.explain-action {
+  border-color: #c9d6ea;
+  background: #fff;
 }
 
 .search-box {
@@ -1718,6 +1724,20 @@ h3 {
 .settings-side-panel {
   display: grid;
   align-content: start;
+}
+
+.active-provider-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 14px;
+}
+
+.active-provider-panel small {
+  color: #667286;
+  font-size: 12px;
 }
 
 .settings-dialog,
