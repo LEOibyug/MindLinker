@@ -12,6 +12,24 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Conversation Generation Hook Refactor
+
+- Extracted main-answer and explanation-chain generation orchestration from `App.tsx` into `app/useConversationGeneration.ts`.
+- Added `services/conversationGeneration.ts` for pure generation rules:
+  - needs-configuration fallback drafts;
+  - transient streaming drafts;
+  - explanation-term source priority;
+  - streaming runtime-log throttling.
+- Kept `App.tsx` responsible for owning app state, project/reference creation, UI composition, and manual explanation/inline question actions.
+- Added tests for generation pure rules and the no-usable-main-model hook path.
+- Reduced `App.tsx` from roughly 1,708 lines to roughly 1,407 lines.
+- Verification:
+  - `npm test -- --run src/services/conversationGeneration.test.ts`
+  - `npm test -- --run src/app/useConversationGeneration.test.tsx`
+  - `npm test -- --run src/app/App.test.tsx -t "needs-configuration|streams|streaming|main answer|explanation|解释链|title|project title|conversation title|automatic explanation|keyword|关键词|background conversations|generated answer|configured main provider"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Project Deletion Rules Refactor
 
 - Extracted project, conversation, and project-reference deletion data rules into `domain/projectLifecycle.ts`.
