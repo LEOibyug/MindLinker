@@ -12,6 +12,19 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Answer Rendering Boundary Refactor
+
+- Extracted answer rendering out of `App.tsx` into focused modules:
+  - `answerRendering.tsx` for Markdown-ish answer parsing, KaTeX rendering, tables, explanation links, and inline-question marker placement.
+  - `InlineConversationUi.tsx` for the inline question dialog and marker button.
+  - `explanations.ts`, `inlineConversations.ts`, and `textAnchors.ts` for shared domain helpers.
+- Kept behavior intentionally stable while reducing `App.tsx` by roughly 850 lines.
+- Added module-level regression coverage for table rendering and formula normalization so future renderer work can be tested without mounting the full application.
+- Verification:
+  - `npm test -- --run src/answerRendering.test.tsx`
+  - `npm test -- --run src/App.test.tsx`
+  - `npm run build`
+
 ### 2026-05-29 - Knowledge Graph Edge Pruning
 
 - Investigated a real runtime log entry where the graph view failed with `node not found: concept-即时码`.
