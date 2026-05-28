@@ -28,6 +28,12 @@ import {
   removeHomeReferenceItem,
   resolveHomeReferenceDocuments
 } from "../services/homeReferences";
+import {
+  buildInitialProjectConversation,
+  buildProjectFromHomeStart,
+  buildProjectNavigationTarget,
+  getConversationGenerationPhase
+} from "../domain/projectLifecycle";
 import { testProviderConnectionRequest, testProviderModelRequest } from "../services/providerDiagnostics";
 import {
   buildRewritePrompt,
@@ -184,9 +190,6 @@ const getCaretRangeFromPoint = (x: number, y: number) => {
 };
 
 const waitForMinimumGenerationFrame = () => new Promise((resolve) => window.setTimeout(resolve, 480));
-
-const fallbackConversationPrompt =
-  "请根据当前项目的全部参考材料进行讲解。";
 
 export function App() {
   const [appView, setAppView] = useState<"home" | "workspace">("home");
@@ -942,29 +945,15 @@ export function App() {
   };
 
   const startProjectFromPrompt = async () => {
-    const trimmedPrompt = homePrompt.trim();
-    const effectivePrompt = trimmedPrompt || fallbackConversationPrompt;
-    const fallbackTitle = "自主学习导读";
-    const initialTitle = trimmedPrompt || fallbackTitle;
-
     const projectId = `project-${Date.now()}`;
     const conversationId = `conversation-${Date.now()}`;
     const projectDocuments = await getReadyHomeReferencesForProject(projectId);
-    const project: LearningProject = {
-      id: projectId,
-      title: initialTitle.slice(0, 24),
-      documents: projectDocuments.map((document) => document.id),
-      conversations: [
-        {
-          id: conversationId,
-          title: initialTitle.slice(0, 32),
-          status: "generating-content",
-          explanationSeed: "",
-          referenceState: projectDocuments.length > 0 ? `refs:${projectDocuments.map((document) => document.id).join("+")}` : "refs:empty"
-        }
-      ]
-    };
-
+    const { effectivePrompt, project } = buildProjectFromHomeStart({
+      prompt: homePrompt,
+      documents: projectDocuments,
+      projectId,
+      conversationId
+    });
     const draft = buildConversationDraft(effectivePrompt, projectDocuments, ragEnabled, homeAnswerMode);
     setParsedProjectReferences((documents) => [...projectDocuments, ...documents]);
     setLocalProjects((projects) => [project, ...projects]);
@@ -993,20 +982,15 @@ export function App() {
     if (!project) {
       return;
     }
+    const target = buildProjectNavigationTarget(project);
     const conversation = project.conversations[0];
-    setActiveProjectId(project.id);
-    setActiveConversationId(conversation.id);
-    setAvailableExplanations(conversationExplanations[conversation.id] ?? []);
+    setActiveProjectId(target.projectId);
+    setActiveConversationId(target.conversationId);
+    setAvailableExplanations(conversationExplanations[target.conversationId] ?? []);
     setExplanationStack([]);
     setViewMode("reader");
-    setGenerationPhase(
-      conversation.status === "generating-content"
-        ? "content"
-        : conversation.status === "generating-annotations"
-          ? "annotations"
-          : "idle"
-    );
-    setAnnotationsRevealed(hasRestorableAnnotations(conversation.id, conversation.status));
+    setGenerationPhase(target.generationPhase);
+    setAnnotationsRevealed(hasRestorableAnnotations(target.conversationId, conversation.status));
     setRewriteDraft(null);
     setReferencePlanId(null);
     setAppliedPatch(false);
@@ -1096,8 +1080,9 @@ export function App() {
     );
     setInlineConversations((conversations) => conversations.filter((conversation) => conversation.projectId !== projectId));
     setActiveProjectId(nextProject.id);
-    setActiveConversationId(nextProject.conversations[0].id);
-    setAvailableExplanations(conversationExplanations[nextProject.conversations[0].id] ?? []);
+    const target = buildProjectNavigationTarget(nextProject);
+    setActiveConversationId(target.conversationId);
+    setAvailableExplanations(conversationExplanations[target.conversationId] ?? []);
     setExplanationStack([]);
     setConfirmingProjectDeleteId(null);
     setNotice("已删除当前学习项目");
@@ -1337,19 +1322,15 @@ export function App() {
     if (!nextProject) {
       return;
     }
-    setActiveProjectId(projectId);
-    setActiveConversationId(nextProject.conversations[0].id);
-    setAvailableExplanations(conversationExplanations[nextProject.conversations[0].id] ?? []);
+    const target = buildProjectNavigationTarget(nextProject);
+    const nextConversation = nextProject.conversations[0];
+    setActiveProjectId(target.projectId);
+    setActiveConversationId(target.conversationId);
+    setAvailableExplanations(conversationExplanations[target.conversationId] ?? []);
     setExplanationStack([]);
     setViewMode("reader");
-    setGenerationPhase(
-      nextProject.conversations[0].status === "generating-content"
-        ? "content"
-        : nextProject.conversations[0].status === "generating-annotations"
-          ? "annotations"
-          : "idle"
-    );
-    setAnnotationsRevealed(hasRestorableAnnotations(nextProject.conversations[0].id, nextProject.conversations[0].status));
+    setGenerationPhase(target.generationPhase);
+    setAnnotationsRevealed(hasRestorableAnnotations(target.conversationId, nextConversation.status));
     setRewriteDraft(null);
     setReferencePlanId(null);
     setAppliedPatch(false);
@@ -1368,13 +1349,7 @@ export function App() {
     setAvailableExplanations(conversationExplanations[conversationId] ?? []);
     setExplanationStack([]);
     setViewMode("reader");
-    setGenerationPhase(
-      nextConversation.status === "generating-content"
-        ? "content"
-        : nextConversation.status === "generating-annotations"
-          ? "annotations"
-          : "idle"
-    );
+    setGenerationPhase(getConversationGenerationPhase(nextConversation.status));
     setAnnotationsRevealed(hasRestorableAnnotations(nextConversation.id, nextConversation.status));
     setRewriteDraft(null);
     setReferencePlanId(null);
@@ -1417,7 +1392,7 @@ export function App() {
       setActiveConversationId(nextConversation.id);
       setAvailableExplanations(nextConversation.id ? conversationExplanations[nextConversation.id] ?? [] : []);
       setExplanationStack([]);
-      setGenerationPhase(nextConversation.status === "generating-content" ? "content" : nextConversation.status === "generating-annotations" ? "annotations" : "idle");
+      setGenerationPhase(getConversationGenerationPhase(nextConversation.status));
       setAnnotationsRevealed(hasRestorableAnnotations(nextConversation.id, nextConversation.status));
     }
     setNotice("已删除对话");
@@ -1453,18 +1428,13 @@ export function App() {
     if (!activeProject.id) {
       return;
     }
-    const prompt = promptInput.trim() || fallbackConversationPrompt;
-    const title = promptInput.trim() ? promptInput.trim().slice(0, 32) : "自主学习导读";
     const conversationId = `conversation-${Date.now()}`;
-    const referenceState = projectDocuments.length > 0 ? `refs:${projectDocuments.map((document) => document.id).join("+")}` : "refs:empty";
-    const conversation = {
-      id: conversationId,
-      title,
-      status: "generating-content" as const,
-      explanationSeed: "",
-      referenceState
-    };
-    const draft = buildConversationDraft(prompt, projectDocuments, ragEnabled, answerMode);
+    const { effectivePrompt, conversation } = buildInitialProjectConversation({
+      prompt: promptInput,
+      documents: projectDocuments,
+      conversationId
+    });
+    const draft = buildConversationDraft(effectivePrompt, projectDocuments, ragEnabled, answerMode);
     setLocalProjects((projects) =>
       projects.map((project) =>
         project.id === activeProject.id
@@ -1475,7 +1445,7 @@ export function App() {
           : project
       )
     );
-    setStoredConversationDrafts((drafts) => ({ ...drafts, [conversationId]: { ...draft, title } }));
+    setStoredConversationDrafts((drafts) => ({ ...drafts, [conversationId]: { ...draft, title: conversation.title } }));
     setActiveConversationId(conversationId);
     setViewMode("reader");
     setAvailableExplanations([]);
@@ -1488,7 +1458,7 @@ export function App() {
     setConfirmingProjectDeleteId(null);
     setConfirmingConversationDeleteId(null);
     setNotice(projectDocuments.length > 0 ? "已新建对话并载入项目参考" : "已新建对话");
-    void generateConversation(conversationId, { ...draft, title }, projectDocuments, activeProject.id);
+    void generateConversation(conversationId, { ...draft, title: conversation.title }, projectDocuments, activeProject.id);
   };
 
   const renderNewConversationPanel = () =>

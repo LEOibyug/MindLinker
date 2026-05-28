@@ -12,6 +12,24 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Project Lifecycle Logic Refactor
+
+- Extracted project/conversation lifecycle rules from `App.tsx` into `domain/projectLifecycle.ts`.
+- Moved pure logic for:
+  - home-created project and first-conversation construction;
+  - project-level conversation construction with the empty-prompt fallback;
+  - reference-state label generation;
+  - conversation-status to visible generation-phase mapping;
+  - project navigation target selection.
+- Kept async reference parsing, state persistence, UI cleanup, deletion side effects, and model generation orchestration in `App.tsx`.
+- Added domain-level tests for fallback prompts/titles, reference-state labels, title truncation, and navigation phase mapping.
+- Reduced `App.tsx` from roughly 1,991 lines to roughly 1,962 lines.
+- Verification:
+  - `npm test -- --run src/domain/projectLifecycle.test.ts`
+  - `npm test -- --run src/app/App.test.tsx -t "starts a usable project|自主学习导读|home-style project starter|switches between learning projects|new conversation|background|running|opens an existing project"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Provider Diagnostics Refactor
 
 - Extracted provider/model connection-test request construction from `App.tsx` into `services/providerDiagnostics.ts`.
