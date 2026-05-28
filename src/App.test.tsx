@@ -1924,10 +1924,11 @@ describe("MindLinker shell", () => {
 
   it("asks and saves an inline question thread at the clicked position", async () => {
     const user = userEvent.setup();
+    const inlineAnswer = "这是模型基于当前位置、主回复和参考生成的回答，其中 $H(X)=-\\sum_i p_i\\log p_i$。";
     const fetchMock = vi.spyOn(window, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({
-        choices: [{ message: { content: "这是模型基于当前位置、主回复和参考生成的回答。" } }]
+        choices: [{ message: { content: inlineAnswer } }]
       })
     } as Response);
     renderWithSeededProjects();
@@ -1946,12 +1947,19 @@ describe("MindLinker shell", () => {
 
     expect(screen.queryByRole("region", { name: "已保存的小对话" })).not.toBeInTheDocument();
     expect(screen.queryByText("这里和前文的假设有什么关系？")).not.toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "在此处提问" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "在此处提问" });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.closest(".modal-backdrop")).toHaveClass("inline-dialog-backdrop");
+    const styles = readFileSync("src/styles.css", "utf8");
+    expect(styles).toContain(".inline-dialog-backdrop {\n  background: transparent;");
+    expect(styles).toContain("backdrop-filter: none;");
 
     await user.type(screen.getByLabelText("当前位置提问"), "这里和前面的信息熵有什么关系？");
     await user.click(screen.getByRole("button", { name: "发送问题" }));
 
-    expect(await screen.findByText("这是模型基于当前位置、主回复和参考生成的回答。")).toBeInTheDocument();
+    expect(await screen.findByText(/这是模型基于当前位置、主回复和参考生成的回答/)).toBeInTheDocument();
+    expect(dialog.querySelector(".inline-math .katex")).toBeInTheDocument();
+    expect(dialog).not.toHaveTextContent("$H(X)");
     const requestBody = String(fetchMock.mock.calls[0]?.[1]?.body ?? "");
     expect(requestBody).toContain("MindLinker Prompt Protocol");
     expect(requestBody).toContain("<task>位置提问回答</task>");
@@ -1968,7 +1976,7 @@ describe("MindLinker shell", () => {
     await user.click(screen.getByRole("button", { name: "发送问题" }));
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(String(fetchMock.mock.calls[1]?.[1]?.body ?? "")).toContain("这里和前面的信息熵有什么关系？");
-    expect(String(fetchMock.mock.calls[1]?.[1]?.body ?? "")).toContain("这是模型基于当前位置、主回复和参考生成的回答。");
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body ?? "")).toContain("H(X)=-\\\\sum_i p_i\\\\log p_i");
 
     await user.click(screen.getByRole("button", { name: "保存" }));
 
@@ -1979,7 +1987,8 @@ describe("MindLinker shell", () => {
     await user.click(marker);
     expect(screen.getByRole("dialog", { name: "在此处提问" })).toBeInTheDocument();
     expect(screen.getByText("这里和前面的信息熵有什么关系？")).toBeInTheDocument();
-    expect(screen.getAllByText("这是模型基于当前位置、主回复和参考生成的回答。").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/这是模型基于当前位置、主回复和参考生成的回答/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("dialog", { name: "在此处提问" }).querySelector(".inline-math .katex")).toBeInTheDocument();
   });
 
   it("filters legacy hardcoded inline conversations from local storage", async () => {

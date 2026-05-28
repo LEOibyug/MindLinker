@@ -12,6 +12,21 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-28 - Inline Question Dialog Rendering
+
+- Fixed the inline "在此处提问" dialog so opening it no longer dims the workspace behind it.
+- Reused the existing answer Markdown renderer for inline question messages, so inline and block formulas render through KaTeX instead of appearing as raw `$...$` text.
+- Kept the change scoped to the inline question dialog; settings and vector-store modals still use their normal backdrop behavior.
+- Regression coverage:
+  - inline question dialog now asserts a transparent dialog-specific backdrop;
+  - saved and active inline question answers render formulas with KaTeX;
+  - formula-related renderer tests continue to cover main answers and explanation cards.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "asks and saves an inline question thread"`
+  - `npm test -- src/App.test.tsx -t "inline question|在此处提问|formula|math"`
+  - `npm test`
+  - `npm run build`
+
 ### 2026-05-28 - Baseline
 
 - Created the initial tracked baseline for the Electron/React MindLinker app.

@@ -1663,6 +1663,16 @@ h3 {
   padding: 82px 28px 0 0;
 }
 
+.inline-dialog-backdrop {
+  background: transparent;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+
+.inline-dialog-backdrop .inline-conversation-dialog {
+  pointer-events: auto;
+}
+
 .settings-page-backdrop {
   position: fixed;
   inset: 68px 0 0;
@@ -1826,7 +1836,25 @@ h3 {
   font-size: 12px;
 }
 
-.inline-thread-message p {
+.inline-thread-content {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  color: #263348;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.inline-thread-content p {
+  margin: 0;
+}
+
+.inline-thread-content .formula-block {
+  width: 100%;
+  margin: 0;
+}
+
+.inline-thread-message > p {
   color: #263348;
   font-size: 13px;
   line-height: 1.55;

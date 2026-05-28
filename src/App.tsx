@@ -4535,7 +4535,7 @@ export function App() {
       {settingsOpen ? renderSettingsPage() : null}
 
       {inlineConversationDraft ? (
-        <div className="modal-backdrop" role="presentation">
+        <div className="modal-backdrop inline-dialog-backdrop" role="presentation">
           <section className="inline-conversation-dialog" role="dialog" aria-modal="true" aria-label="在此处提问">
             <header>
               <div>
@@ -4551,7 +4551,7 @@ export function App() {
                 inlineConversationDraft.messages.map((message, index) => (
                   <article className={`inline-thread-message ${message.role}`} key={`${message.role}-${index}-${message.content.slice(0, 12)}`}>
                     <strong>{message.role === "user" ? "提问" : "回答"}</strong>
-                    <p>{message.content}</p>
+                    <div className="inline-thread-content">{renderAnswerText(message.content)}</div>
                   </article>
                 ))
               ) : (
