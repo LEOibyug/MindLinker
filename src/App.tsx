@@ -1,5 +1,4 @@
 import {
-  BookOpen,
   Brain,
   Highlighter,
   FilePlus2,
@@ -9,11 +8,8 @@ import {
   Network,
   Sparkles,
   PencilLine,
-  Plus,
-  Trash2,
   Search,
   Settings,
-  Folder,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,7 +19,6 @@ import {
   buildConversationDraft,
   buildFallbackAnswer,
   completeConversationDraft,
-  middleEllipsis,
   normalizeStoredConversationDrafts,
   normalizeStoredInlineConversations,
   isLegacySavedInlineConversation,
@@ -68,6 +63,8 @@ import {
   parseMarkedAnswer,
   stripExplainableMarkers
 } from "./markedTerms";
+import { NewConversationPanel } from "./NewConversationPanel";
+import { ProjectSidebar } from "./ProjectSidebar";
 
 type ContextMenuState = {
   x: number;
@@ -1627,57 +1624,19 @@ export function App() {
 
   const renderNewConversationPanel = () =>
     newConversationOpen ? (
-      <form
-        aria-label="新建对话输入栏"
-        className="new-conversation-panel"
-        onSubmit={(event) => {
-          event.preventDefault();
-          createConversationInActiveProject();
+      <NewConversationPanel
+        answerMode={newConversationAnswerMode}
+        prompt={newConversationPrompt}
+        referenceCount={projectDocuments.length}
+        onAnswerModeChange={setNewConversationAnswerMode}
+        onCancel={() => {
+          setNewConversationOpen(false);
+          setNewConversationPrompt("");
+          setNewConversationAnswerMode("balanced");
         }}
-      >
-        <div className="new-conversation-copy">
-          <h1>新的学习对话</h1>
-          <p>{projectDocuments.length > 0 ? `将载入当前项目的 ${projectDocuments.length} 份参考` : "可以留空生成项目导读"}</p>
-        </div>
-        <div className="new-conversation-input-row">
-          <input
-            aria-label="新对话提示词"
-            placeholder="可以留空，应用会基于项目参考生成学习导读"
-            value={newConversationPrompt}
-            onChange={(event) => setNewConversationPrompt(event.target.value)}
-          />
-          <button className="primary-button" type="submit">
-            创建对话
-          </button>
-        </div>
-        <fieldset className="answer-mode-control" aria-label="新对话回复风格">
-          {Object.entries(answerModePrompts).map(([mode, config]) => (
-            <label className={newConversationAnswerMode === mode ? "active" : ""} key={mode}>
-              <input
-                checked={newConversationAnswerMode === mode}
-                name="new-conversation-answer-mode"
-                type="radio"
-                value={mode}
-                onChange={() => setNewConversationAnswerMode(mode as AnswerMode)}
-              />
-              <span>{config.label}</span>
-            </label>
-          ))}
-        </fieldset>
-        <div className="new-conversation-actions">
-          <button
-            className="ghost-button"
-            type="button"
-            onClick={() => {
-              setNewConversationOpen(false);
-              setNewConversationPrompt("");
-              setNewConversationAnswerMode("balanced");
-            }}
-          >
-            取消
-          </button>
-        </div>
-      </form>
+        onPromptChange={setNewConversationPrompt}
+        onSubmit={() => createConversationInActiveProject()}
+      />
     ) : null;
 
   const createRewriteDraft = () => {
@@ -2161,187 +2120,43 @@ export function App() {
       </header>
 
       <div className="workspace" aria-hidden={settingsOpen ? true : undefined}>
-        <aside className="library-panel" aria-label="项目目录">
-          <section>
-            <div className="panel-title">
-              <BookOpen aria-hidden="true" size={17} />
-              <h2>项目</h2>
-            </div>
-            <div className="project-actions">
-              <button className="mini-action-button" type="button" onClick={createProject}>
-                <Plus aria-hidden="true" size={14} />
-                新建项目
-              </button>
-            </div>
-            <div className="project-title-row">
-              {editingTitle ? (
-                <input
-                  aria-label="项目标题"
-                  value={activeProjectTitle}
-                  onChange={(event) =>
-                    setProjectTitles((titles) => ({
-                      ...titles,
-                      [activeProject.id]: event.target.value
-                    }))
-                  }
-                />
-              ) : (
-                <strong>{activeProjectTitle}</strong>
-              )}
-              <button className="mini-icon-button" type="button" aria-label="编辑项目标题" onClick={() => setEditingTitle(true)}>
-                <PencilLine aria-hidden="true" size={14} />
-              </button>
-              <button
-                className="mini-icon-button"
-                type="button"
-                aria-label="用模型生成项目标题"
-                onClick={() => {
-                  setEditingTitle(true);
-                  setProjectTitles((titles) => ({ ...titles, [activeProject.id]: "交叉熵与分布学习" }));
-                }}
-              >
-                <Brain aria-hidden="true" size={14} />
-              </button>
-            </div>
-          </section>
-
-          <section className="stack">
-            <h3>项目文件夹</h3>
-            <div className="project-tree" role="tree" aria-label="学习项目文件夹">
-              {localProjects.map((project) => {
-                const title = projectTitles[project.id] ?? project.title;
-                const isActiveProject = project.id === activeProject.id;
-                const projectReferenceIds = includedDocumentIds[project.id] ?? project.documents;
-                const references = allDocuments.filter((document) => projectReferenceIds.includes(document.id));
-                return (
-                  <div
-                    className={`project-folder ${isActiveProject ? "active" : ""}`}
-                    key={project.id}
-                    role="treeitem"
-                    aria-label={`项目 ${title}`}
-                    aria-expanded={isActiveProject}
-                    onClick={() => switchProject(project.id)}
-                  >
-                    <div className="project-folder-row">
-                      <button
-                        className={`project-folder-button ${isActiveProject ? "active" : ""}`}
-                        type="button"
-                        aria-label={`项目 ${title}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          switchProject(project.id);
-                        }}
-                      >
-                        <Folder aria-hidden="true" size={15} />
-                        <span>{title}</span>
-                        <small>{project.conversations.length} 个对话 · {projectReferenceIds.length} 份参考</small>
-                      </button>
-                      <button
-                        className={`mini-icon-button ${confirmingProjectDeleteId === project.id ? "danger" : ""}`}
-                        type="button"
-                        aria-label={`${confirmingProjectDeleteId === project.id ? "确认删除项目" : "删除项目"} ${title}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          deleteProject(project.id);
-                        }}
-                      >
-                        <Trash2 aria-hidden="true" size={13} />
-                      </button>
-                    </div>
-                    {isActiveProject ? (
-                      <div className="project-folder-contents" onClick={(event) => event.stopPropagation()}>
-                        <section role="group" aria-label={`${title} 参考`} className="folder-group">
-                          <div className="folder-group-title">
-                            <h4>参考</h4>
-                            <div className="reference-actions">
-                              <button className="mini-action-button" type="button" onClick={introduceReference}>
-                                <FilePlus2 aria-hidden="true" size={14} />
-                                引入参考
-                              </button>
-                              <input
-                                id="workspace-reference-input"
-                                className="visually-hidden-input"
-                                multiple
-                                type="file"
-                                aria-label="导入参考文件"
-                                onChange={(event) => {
-                                  void addWorkspaceReferences(Array.from(event.target.files ?? []));
-                                  event.currentTarget.value = "";
-                                }}
-                              />
-                            </div>
-                          </div>
-                          {references.map((document) => (
-                            <article className={`resource-card ${document.status === "indexed" ? "active" : ""}`} key={document.id}>
-                              <div className="resource-card-header">
-                                <strong className="resource-title" title={document.title}>
-                                  {middleEllipsis(document.title, 16)}
-                                </strong>
-                                <button
-                                  className={`mini-icon-button ${confirmingReferenceDeleteId === document.id ? "danger" : ""}`}
-                                  type="button"
-                                  aria-label={`${confirmingReferenceDeleteId === document.id ? "确认删除参考" : "删除参考"} ${document.title}`}
-                                  onClick={() => deleteProjectReference(document.id)}
-                                >
-                                  <Trash2 aria-hidden="true" size={13} />
-                                </button>
-                              </div>
-                            </article>
-                          ))}
-                          {references.length === 0 ? <p className="empty-sidebar-note">暂无参考</p> : null}
-                        </section>
-                        <section role="group" aria-label={`${title} 对话`} className="folder-group">
-                          <div className="folder-group-title">
-                            <h4>对话</h4>
-                            <button
-                              className="mini-action-button"
-                              type="button"
-                              onClick={() => {
-                                setViewMode("reader");
-                                setNewConversationOpen(true);
-                              }}
-                            >
-                              <MessageSquarePlus aria-hidden="true" size={14} />
-                              新建对话
-                            </button>
-                          </div>
-                          {project.conversations.map((conversation) => (
-                            (() => {
-                              const isRunning = runningConversationIds.includes(conversation.id);
-                              const confirmingDelete = confirmingConversationDeleteId === conversation.id;
-                              return (
-                                <div className="conversation-row" key={conversation.id}>
-                                  <button
-                                    className={`conversation-item ${conversation.id === activeConversation.id ? "active" : ""} ${isRunning ? "running" : ""}`}
-                                    type="button"
-                                    aria-label={`对话 ${conversation.title}${isRunning ? " 正在生成" : ""}`}
-                                    onClick={() => switchConversation(conversation.id)}
-                                  >
-                                    <span>{conversation.title}</span>
-                                    {isRunning ? <small>正在生成</small> : null}
-                                  </button>
-                                  <button
-                                    className={`mini-icon-button ${confirmingDelete ? "danger" : ""}`}
-                                    type="button"
-                                    aria-label={`${confirmingDelete ? "确认删除对话" : "删除对话"} ${conversation.title}`}
-                                    onClick={() => deleteConversation(conversation.id)}
-                                  >
-                                    <Trash2 aria-hidden="true" size={13} />
-                                  </button>
-                                </div>
-                              );
-                            })()
-                          ))}
-                          {project.conversations.length === 0 ? <p className="empty-sidebar-note">暂无对话</p> : null}
-                        </section>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        </aside>
+        <ProjectSidebar
+          activeConversationId={activeConversation.id}
+          activeDocumentIds={activeDocumentIds}
+          activeProjectId={activeProject.id}
+          activeProjectTitle={activeProjectTitle}
+          allDocuments={allDocuments}
+          confirmingConversationDeleteId={confirmingConversationDeleteId}
+          confirmingProjectDeleteId={confirmingProjectDeleteId}
+          confirmingReferenceDeleteId={confirmingReferenceDeleteId}
+          editingTitle={editingTitle}
+          projectTitles={projectTitles}
+          projects={localProjects}
+          runningConversationIds={runningConversationIds}
+          onCreateProject={createProject}
+          onDeleteConversation={deleteConversation}
+          onDeleteProject={deleteProject}
+          onDeleteReference={deleteProjectReference}
+          onIntroduceReference={introduceReference}
+          onNewConversation={() => {
+            setViewMode("reader");
+            setNewConversationOpen(true);
+          }}
+          onEditProjectTitle={() => setEditingTitle(true)}
+          onGenerateProjectTitle={() => {
+            setEditingTitle(true);
+            setProjectTitles((titles) => ({ ...titles, [activeProject.id]: "交叉熵与分布学习" }));
+          }}
+          onSetProjectTitle={(title) =>
+            setProjectTitles((titles) => ({
+              ...titles,
+              [activeProject.id]: title
+            }))
+          }
+          onSwitchConversation={switchConversation}
+          onSwitchProject={switchProject}
+          onWorkspaceReferencesSelected={(files) => void addWorkspaceReferences(files)}
+        />
 
         <main className="reader-panel" aria-label="阅读区">
           <div className="reader-toolbar">

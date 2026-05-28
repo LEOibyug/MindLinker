@@ -12,6 +12,23 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Project Sidebar And New Conversation Refactor
+
+- Extracted workspace project navigation into `ProjectSidebar.tsx`.
+- Extracted the in-project new-conversation composer into `NewConversationPanel.tsx`.
+- Preserved the existing sidebar behavior while moving it out of `App.tsx`:
+  - project folders keep their tree semantics and active-folder switching;
+  - reference import still exposes `引入参考`;
+  - project title editing and model-title generation controls remain available;
+  - running/deleting conversation and reference states are still rendered in the owning rows.
+- Added component-level tests for the extracted sidebar and new-conversation composer.
+- Reduced `App.tsx` from roughly 2,711 lines to roughly 2,526 lines.
+- Verification:
+  - `npm test -- --run src/NewConversationPanel.test.tsx src/ProjectSidebar.test.tsx`
+  - `npm test -- --run src/App.test.tsx -t "folder with reference|persists parsed reference|project titles"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Settings And Vector Store UI Refactor
 
 - Extracted settings UI from `App.tsx` into `SettingsPage.tsx`.
