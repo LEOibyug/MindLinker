@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   providerConfigs,
@@ -100,6 +100,7 @@ type ContextMenuState = {
   y: number;
   selectedText: string;
   sourceExplanationTerm?: string;
+  sourceExplanationBody?: string;
 } | null;
 
 type InlineConversationDraft = {
@@ -126,6 +127,12 @@ type InlineConversation = {
   answer?: string;
   messages: InlineConversationMessage[];
   saved: boolean;
+};
+
+type InlineConversationMarkerBinding = {
+  anchorText: string;
+  conversation: InlineConversation;
+  index: number;
 };
 
 type AnswerMode = "summary" | "balanced" | "lecture";
@@ -1269,13 +1276,31 @@ ${referenceContext || "无"}
 };
 
 const parseExplanationJson = (text: string, referenceState: string): Explanation[] => {
-  const jsonText = text
+  const strippedText = text
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/i, "")
     .trim();
+  const fencedMatch = strippedText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidateText = fencedMatch?.[1]?.trim() || strippedText;
+  const firstArrayStart = candidateText.indexOf("[");
+  const lastArrayEnd = candidateText.lastIndexOf("]");
+  const firstObjectStart = candidateText.indexOf("{");
+  const lastObjectEnd = candidateText.lastIndexOf("}");
+  const jsonText =
+    firstArrayStart !== -1 && lastArrayEnd > firstArrayStart
+      ? candidateText.slice(firstArrayStart, lastArrayEnd + 1)
+      : firstObjectStart !== -1 && lastObjectEnd > firstObjectStart
+        ? candidateText.slice(firstObjectStart, lastObjectEnd + 1)
+        : candidateText;
   try {
     const parsed = JSON.parse(jsonText) as ExplanationJsonItem[] | { explanations?: ExplanationJsonItem[] };
-    const items: ExplanationJsonItem[] = Array.isArray(parsed) ? parsed : Array.isArray(parsed.explanations) ? parsed.explanations : [];
+    const items: ExplanationJsonItem[] = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.explanations)
+        ? parsed.explanations
+        : parsed && typeof parsed === "object"
+          ? [parsed as ExplanationJsonItem]
+          : [];
     return items
       .map(normalizeExplanationJsonItem)
       .filter((item): item is ValidExplanationJsonItem => Boolean(item))
@@ -1879,8 +1904,34 @@ const renderInlineAnswerWithTerms = (
   text: string,
   terms: Explanation[],
   annotationsRevealed: boolean,
-  openExplanation: (term: string) => void
+  openExplanation: (term: string) => void,
+  inlineConversationMarkers: InlineConversationMarkerBinding[] = [],
+  openInlineConversation: (conversation: InlineConversation) => void = () => {}
 ) => {
+  const sortedInlineMarkers = inlineConversationMarkers
+    .filter((marker) => marker.anchorText && text.includes(marker.anchorText))
+    .sort((a, b) => b.anchorText.length - a.anchorText.length);
+  const markerMatcher =
+    sortedInlineMarkers.length > 0
+      ? new RegExp(`(${sortedInlineMarkers.map((marker) => escapeRegExp(marker.anchorText)).join("|")})`, "g")
+      : null;
+  const renderMarker = (part: string, keyPrefix: string) => {
+    const marker = sortedInlineMarkers.find((item) => item.anchorText === part);
+    return marker
+      ? renderInlineConversationMarker(marker.conversation, marker.index, openInlineConversation, true, `${keyPrefix}-inline-${marker.conversation.id}`)
+      : null;
+  };
+  const renderInlineMarkdownWithMarkers = (value: string, keyPrefix: string) => {
+    if (!markerMatcher) {
+      return renderInlineMarkdown(value);
+    }
+    return value.split(markerMatcher).map((part, index) => (
+      <Fragment key={`${keyPrefix}-inline-marker-${index}-${part}`}>
+        {renderInlineMarkdown(part)}
+        {renderMarker(part, `${keyPrefix}-${index}`)}
+      </Fragment>
+    ));
+  };
   const renderSegments = (value: string, keyPrefix: string, renderSegment: (segment: string, key: string) => ReactNode) =>
     parseBoldSegments(value).map((segment, segmentIndex) => {
       const key = `${keyPrefix}-bold-${segmentIndex}`;
@@ -1892,24 +1943,26 @@ const renderInlineAnswerWithTerms = (
     .filter(Boolean)
     .sort((a, b) => b.length - a.length);
   if (sortedTerms.length === 0) {
-    return renderSegments(text, "plain", (segment) => renderInlineMarkdown(segment));
+    return renderSegments(text, "plain", renderInlineMarkdownWithMarkers);
   }
   const matcher = new RegExp(`(${sortedTerms.map(escapeRegExp).join("|")})`, "g");
   const renderTermSplit = (value: string, keyPrefix: string) => value.split(matcher).map((part, index) => {
     const termIndex = sortedTerms.findIndex((term) => term === part);
     if (termIndex === -1) {
-      return <span key={`${keyPrefix}-${index}-${part}`}>{renderInlineMarkdown(part)}</span>;
+      return <span key={`${keyPrefix}-${index}-${part}`}>{renderInlineMarkdownWithMarkers(part, `${keyPrefix}-${index}`)}</span>;
     }
     return (
-      <button
-        className={`term-link ${annotationsRevealed ? `revealed delay-${Math.min(termIndex, 2)}` : ""}`}
-        type="button"
-        aria-label={`解释 ${part}`}
-        onClick={() => openExplanation(part)}
-        key={`${keyPrefix}-${index}-${part}`}
-      >
-        {part}
-      </button>
+      <Fragment key={`${keyPrefix}-${index}-${part}`}>
+        <button
+          className={`term-link ${annotationsRevealed ? `revealed delay-${Math.min(termIndex, 2)}` : ""}`}
+          type="button"
+          aria-label={`解释 ${part}`}
+          onClick={() => openExplanation(part)}
+        >
+          {part}
+        </button>
+        {renderMarker(part, `${keyPrefix}-${index}`)}
+      </Fragment>
     );
   });
   return renderSegments(text, "terms", renderTermSplit);
@@ -1919,7 +1972,9 @@ const renderAnswerText = (
   text: string,
   terms: Explanation[] = [],
   annotationsRevealed = false,
-  openExplanation: (term: string) => void = () => {}
+  openExplanation: (term: string) => void = () => {},
+  inlineConversationMarkers: InlineConversationMarkerBinding[] = [],
+  openInlineConversation: (conversation: InlineConversation) => void = () => {}
 ) => {
   const textBoundTerms = bindExplanationsToAnswerText(text, terms);
   const blocks = parseAnswerBlocks(text);
@@ -1960,7 +2015,16 @@ const renderAnswerText = (
             <thead>
               <tr>
                 {header.map((cell, index) => (
-                  <th key={`head-${index}`}>{renderInlineAnswerWithTerms(cell, textBoundTerms, annotationsRevealed, openExplanation)}</th>
+                  <th key={`head-${index}`}>
+                    {renderInlineAnswerWithTerms(
+                      cell,
+                      textBoundTerms,
+                      annotationsRevealed,
+                      openExplanation,
+                      inlineConversationMarkers,
+                      openInlineConversation
+                    )}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -1969,7 +2033,14 @@ const renderAnswerText = (
                 <tr key={`row-${rowIndex}`}>
                   {row.map((cell, cellIndex) => (
                     <td key={`cell-${rowIndex}-${cellIndex}`}>
-                      {renderInlineAnswerWithTerms(cell, textBoundTerms, annotationsRevealed, openExplanation)}
+                      {renderInlineAnswerWithTerms(
+                        cell,
+                        textBoundTerms,
+                        annotationsRevealed,
+                        openExplanation,
+                        inlineConversationMarkers,
+                        openInlineConversation
+                      )}
                     </td>
                   ))}
                 </tr>
@@ -1996,7 +2067,9 @@ const renderAnswerText = (
               line.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, ""),
               textBoundTerms,
               annotationsRevealed,
-              openExplanation
+              openExplanation,
+              inlineConversationMarkers,
+              openInlineConversation
             )
           });
           listItemIndex += 1;
@@ -2008,7 +2081,14 @@ const renderAnswerText = (
             <>
               {lastItem.content}
               <br />
-              {renderInlineAnswerWithTerms(line, textBoundTerms, annotationsRevealed, openExplanation)}
+              {renderInlineAnswerWithTerms(
+                line,
+                textBoundTerms,
+                annotationsRevealed,
+                openExplanation,
+                inlineConversationMarkers,
+                openInlineConversation
+              )}
             </>
           );
           return;
@@ -2029,11 +2109,63 @@ const renderAnswerText = (
           elements.push(<h3 key={`h3-${elements.length}`} className={level >= 4 ? "minor-heading" : undefined}>{content}</h3>);
           return;
         }
-        elements.push(<p key={`p-${elements.length}`}>{renderInlineAnswerWithTerms(line, textBoundTerms, annotationsRevealed, openExplanation)}</p>);
+        elements.push(
+          <p key={`p-${elements.length}`}>
+            {renderInlineAnswerWithTerms(
+              line,
+              textBoundTerms,
+              annotationsRevealed,
+              openExplanation,
+              inlineConversationMarkers,
+              openInlineConversation
+            )}
+          </p>
+        );
       });
   });
   flushList();
   return elements;
+};
+
+const getInlineConversationAnchorText = (conversation: InlineConversation) => {
+  const selectionPrefix = "选区：";
+  if (!conversation.positionLabel.startsWith(selectionPrefix)) {
+    return "";
+  }
+  return conversation.positionLabel.slice(selectionPrefix.length).trim();
+};
+
+const renderInlineConversationMarker = (
+  conversation: InlineConversation,
+  index: number,
+  onOpen: (conversation: InlineConversation) => void,
+  compact = false,
+  key?: string
+) => (
+  <button
+    className={`inline-question-marker ${compact ? "embedded-marker" : ""}`}
+    type="button"
+    key={key ?? conversation.id}
+    aria-label={`查看位置提问 ${index + 1}`}
+    onClick={() => onOpen(conversation)}
+  >
+    <MessageSquarePlus aria-hidden="true" size={compact ? 13 : 14} />
+    {!compact ? <span>{conversation.anchor}</span> : null}
+  </button>
+);
+
+const renderAnswerWithInlineConversations = (
+  text: string,
+  terms: Explanation[],
+  inlineItems: InlineConversation[],
+  annotationsRevealed: boolean,
+  openExplanation: (term: string) => void,
+  openInlineConversation: (conversation: InlineConversation) => void
+) => {
+  const anchoredItems = inlineItems
+    .map((conversation, index) => ({ conversation, index, anchorText: getInlineConversationAnchorText(conversation) }))
+    .filter((item) => item.anchorText && text.includes(item.anchorText));
+  return renderAnswerText(text, terms, annotationsRevealed, openExplanation, anchoredItems, openInlineConversation);
 };
 
 const waitForMinimumGenerationFrame = () => new Promise((resolve) => window.setTimeout(resolve, 480));
@@ -3193,17 +3325,21 @@ export function App() {
 
   const openReaderMenu = (event: React.MouseEvent<HTMLElement>) => {
     event.preventDefault();
-    const sourceExplanationTerm =
+    const sourceExplanationElement =
       event.target instanceof HTMLElement
-        ? event.target.closest<HTMLElement>("[data-explanation-term]")?.dataset.explanationTerm
-        : undefined;
+        ? event.target.closest<HTMLElement>("[data-explanation-term]")
+        : null;
+    const sourceExplanationTerm = sourceExplanationElement?.dataset.explanationTerm;
+    const sourceExplanationBody = sourceExplanationTerm
+      ? availableExplanations.find((explanation) => explanation.term === sourceExplanationTerm)?.body
+      : undefined;
     const selectedText =
       window.getSelection()?.toString().trim() ||
       (event.target instanceof HTMLElement
         ? event.target.closest<HTMLElement>("[data-selectable-text]")?.dataset.selectableText?.trim()
         : "") ||
       "";
-    setContextMenu({ x: event.clientX, y: event.clientY, selectedText, sourceExplanationTerm });
+    setContextMenu({ x: event.clientX, y: event.clientY, selectedText, sourceExplanationTerm, sourceExplanationBody });
   };
 
   const createManualExplanation = async () => {
@@ -3211,6 +3347,8 @@ export function App() {
       return;
     }
     const selectedText = contextMenu.selectedText;
+    const sourceExplanationTerm = contextMenu.sourceExplanationTerm;
+    const sourceExplanationBody = contextMenu.sourceExplanationBody;
     setContextMenu(null);
     const chatConfig = findChatModelConfig(customProviders, activeProviderId);
     if (!chatConfig) {
@@ -3221,9 +3359,12 @@ export function App() {
     setManualExplanationPending(selectedText);
     setNotice("正在生成选区解释");
     const explanationId = normalizeMarkedTermId("manual-selected", selectedText, 1);
+    const explanationContext = sourceExplanationBody
+      ? `${activeDraft?.answerMarkdown ?? ""}\n\n当前解释：${sourceExplanationBody}`
+      : activeDraft?.answerMarkdown ?? selectedText;
     try {
       const explanations = await requestExplanationChain(
-        activeDraft?.answerMarkdown ?? selectedText,
+        explanationContext,
         [{ id: explanationId, term: selectedText, ordinal: 1 }],
         projectDocuments,
         chatConfig.provider,
@@ -3246,7 +3387,7 @@ export function App() {
         [activeConversation.id]: [...(items[activeConversation.id] ?? []).filter((item) => item.term !== explanation.term), explanation]
       }));
       setAvailableExplanations((items) => [...items.filter((item) => item.term !== explanation.term), explanation]);
-      if (!contextMenu.sourceExplanationTerm) {
+      if (!sourceExplanationTerm) {
         setExplanationStack((stack) => [...stack.filter((item) => item.term !== explanation.term), explanation]);
       }
       setNotice("已生成选区解释");
@@ -4347,7 +4488,16 @@ export function App() {
             {activeDraft ? (
               <div className="draft-answer">
                 {activeDraft.modelStatus === "generated" && activeDraft.answerMarkdown ? (
-                  <>{renderAnswerText(activeDraft.answerMarkdown, renderedConversationExplanations, annotationsRevealed, openExplanation)}</>
+                  <>
+                    {renderAnswerWithInlineConversations(
+                      activeDraft.answerMarkdown,
+                      renderedConversationExplanations,
+                      activeInlineConversations,
+                      annotationsRevealed,
+                      openExplanation,
+                      openInlineConversation
+                    )}
+                  </>
                 ) : activeDraft.modelStatus === "needs-configuration" || activeDraft.modelStatus === "failed" ? (
                   <div className="model-state-panel" role="note">
                     <strong>{activeDraft.modelError ?? "需要配置模型"}</strong>
@@ -4375,18 +4525,9 @@ export function App() {
             ) : null}
             {activeInlineConversations.length > 0 ? (
               <section className="inline-conversation-list" aria-label="已保存的位置提问">
-                {activeInlineConversations.map((conversation, index) => (
-                  <button
-                    className="inline-question-marker"
-                    type="button"
-                    key={conversation.id}
-                    aria-label={`查看位置提问 ${index + 1}`}
-                    onClick={() => openInlineConversation(conversation)}
-                  >
-                    <MessageSquarePlus aria-hidden="true" size={14} />
-                    <span>{conversation.anchor}</span>
-                  </button>
-                ))}
+                {activeInlineConversations
+                  .filter((conversation) => !getInlineConversationAnchorText(conversation) || !activeDraft?.answerMarkdown.includes(getInlineConversationAnchorText(conversation)))
+                  .map((conversation, index) => renderInlineConversationMarker(conversation, index, openInlineConversation))}
               </section>
             ) : null}
             {activeReferencePlan ? (

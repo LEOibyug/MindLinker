@@ -637,6 +637,17 @@ h3 {
   padding: 0 10px;
 }
 
+.inline-question-marker.embedded-marker {
+  justify-content: center;
+  width: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  margin: 0 3px;
+  border-radius: 999px;
+  padding: 0;
+  vertical-align: middle;
+}
+
 .inline-question-marker:hover {
   border-color: #9db9ee;
   background: #eef5ff;

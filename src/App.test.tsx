@@ -1832,6 +1832,152 @@ describe("MindLinker shell", () => {
     expect(screen.getByText("概率分布描述随机变量不同取值的概率安排。")).toBeInTheDocument();
   });
 
+  it("uses explanation-card context and accepts wrapped object JSON for selected explanation text", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      toString: () => "概率分布"
+    } as Selection);
+    vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
+      const body = String(init?.body ?? "");
+      const isTermExtraction = body.includes("关键词抽取任务");
+      const isExplanationRequest = body.includes("待解释词表");
+      const isTitleRequest = body.includes("项目标题生成任务");
+      if (isTermExtraction) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ terms: [{ id: "term-cross-entropy", term: "交叉熵" }] }) } }]
+          })
+        } as Response;
+      }
+      if (isExplanationRequest && body.includes("term=概率分布")) {
+        expect(body).toContain("当前解释：交叉熵依赖概率分布来定义平均编码代价。");
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content:
+                    "可以。下面是 JSON：\n```json\n{\"id\":\"manual-probability\",\"term\":\"概率分布\",\"body\":\"概率分布是在当前解释语境下为随机变量各取值分配概率的对象。\",\"source\":\"来源：当前选区\"}\n```"
+                }
+              }
+            ]
+          })
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: isTitleRequest
+                  ? "课程说明"
+                  : isExplanationRequest
+                    ? JSON.stringify([
+                        {
+                          id: "term-cross-entropy",
+                          term: "交叉熵",
+                          body: "交叉熵依赖概率分布来定义平均编码代价。",
+                          source: "来源：模型解释"
+                        }
+                      ])
+                    : "这里解释 [[ml:term-cross-entropy]]交叉熵[[/ml]]。"
+              }
+            }
+          ]
+        })
+      } as Response;
+    });
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+
+    await user.type(screen.getByLabelText("学习问题"), "解释交叉熵");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await startExplanationGeneration(user);
+    await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
+    await user.click(screen.getByRole("button", { name: "解释 交叉熵" }));
+
+    const card = screen.getByRole("heading", { name: "交叉熵" }).closest(".explanation-card");
+    fireEvent.contextMenu(card!, {
+      clientX: 420,
+      clientY: 300
+    });
+    await user.click(screen.getByRole("menuitem", { name: "为选区生成解释" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "解释 概率分布" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "解释 概率分布" }));
+    expect(screen.getByRole("heading", { name: "概率分布" })).toBeInTheDocument();
+    expect(screen.getByText("概率分布是在当前解释语境下为随机变量各取值分配概率的对象。")).toBeInTheDocument();
+    expect(screen.queryByText("模型没有返回可用解释，请稍后重试")).not.toBeInTheDocument();
+  });
+
+  it("recovers after a failed selected-text explanation and allows the next selection to explain", async () => {
+    const user = userEvent.setup();
+    let selectedText = "第一次选区";
+    vi.spyOn(window, "getSelection").mockImplementation(() => ({
+      toString: () => selectedText
+    } as Selection));
+    vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
+      const body = String(init?.body ?? "");
+      const isExplanationRequest = body.includes("待解释词表");
+      if (isExplanationRequest && body.includes("term=第一次选区")) {
+        return {
+          ok: true,
+          json: async () => ({ choices: [{ message: { content: "[]" } }] })
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify([
+                  {
+                    id: "manual-second",
+                    term: "第二次选区",
+                    body: "第二次选区已经成功生成解释。",
+                    source: "来源：当前选区"
+                  }
+                ])
+              }
+            }
+          ]
+        })
+      } as Response;
+    });
+    renderWithSeededProjects();
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    await enterWorkspace(user);
+
+    fireEvent.contextMenu(screen.getByRole("article", { name: "回答正文" }), {
+      clientX: 420,
+      clientY: 300
+    });
+    await user.click(screen.getByRole("menuitem", { name: "为选区生成解释" }));
+    await screen.findByText("模型没有返回可用解释，请稍后重试");
+
+    selectedText = "第二次选区";
+    fireEvent.contextMenu(screen.getByRole("article", { name: "回答正文" }), {
+      clientX: 430,
+      clientY: 320
+    });
+    await user.click(screen.getByRole("menuitem", { name: "为选区生成解释" }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "第二次选区" })).toBeInTheDocument());
+    expect(screen.getByText("第二次选区已经成功生成解释。")).toBeInTheDocument();
+  });
+
   it("keeps long explanation content constrained inside the explanation panel", async () => {
     const user = userEvent.setup();
     vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
@@ -1989,6 +2135,59 @@ describe("MindLinker shell", () => {
     expect(screen.getByText("这里和前面的信息熵有什么关系？")).toBeInTheDocument();
     expect(screen.getAllByText(/这是模型基于当前位置、主回复和参考生成的回答/).length).toBeGreaterThan(0);
     expect(screen.getByRole("dialog", { name: "在此处提问" }).querySelector(".inline-math .katex")).toBeInTheDocument();
+  });
+
+  it("renders saved inline question markers at the selected text location", async () => {
+    const user = userEvent.setup();
+    seedExistingProjects();
+    window.localStorage.setItem(
+      "mindlinker.conversationDrafts",
+      JSON.stringify({
+        "cross-entropy": {
+          title: "交叉熵为什么适合分类",
+          prompt: "解释交叉熵",
+          answerMode: "balanced",
+          referenceMode: "direct",
+          referenceTitles: [],
+          referenceContext: "",
+          openAIInputPreview: "",
+          answerMarkdown: "交叉熵依赖概率分布来定义平均编码代价。",
+          modelStatus: "generated",
+          generated: true,
+          explanationTerms: []
+        }
+      })
+    );
+    window.localStorage.setItem(
+      "mindlinker.inlineConversations",
+      JSON.stringify([
+        {
+          id: "inline-probability",
+          projectId: "loss-functions",
+          conversationId: "cross-entropy",
+          anchor: "选区：概率分布",
+          positionLabel: "选区：概率分布",
+          question: "这里的概率分布是什么？",
+          answer: "它指目标分布或预测分布。",
+          messages: [
+            { role: "user", content: "这里的概率分布是什么？" },
+            { role: "assistant", content: "它指目标分布或预测分布。" }
+          ],
+          saved: true
+        }
+      ])
+    );
+    render(<App />);
+    await enterWorkspace(user);
+
+    const paragraph = screen.getByText(/交叉熵依赖/).closest("p");
+    const marker = within(paragraph!).getByRole("button", { name: /查看位置提问/ });
+    expect(paragraph?.textContent).toContain("交叉熵依赖概率分布来定义平均编码代价");
+    expect(marker).toBeInTheDocument();
+
+    await user.click(marker);
+    expect(screen.getByRole("dialog", { name: "在此处提问" })).toBeInTheDocument();
+    expect(screen.getByText("这里的概率分布是什么？")).toBeInTheDocument();
   });
 
   it("filters legacy hardcoded inline conversations from local storage", async () => {

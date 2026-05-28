@@ -12,6 +12,22 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-28 - Selection Explanations And Inline Question Anchors
+
+- Fixed selected-text explanations created from inside an explanation card so the request includes the active explanation card body as local context.
+- Hardened explanation JSON parsing for common model replies that wrap JSON in prose, fenced `json` blocks, or return a single explanation object instead of an array.
+- Ensured a failed selected-text explanation does not poison later selected-text explanation attempts.
+- Rendered saved inline question markers at selected-text anchors inside the answer body; only non-anchorable saved questions remain in the fallback list.
+- Regression coverage:
+  - explanation-card selected text uses `当前解释` context and accepts wrapped object JSON;
+  - selected-text explanation recovers after an empty-model result;
+  - saved inline question markers appear beside their selected answer text.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "wrapped object JSON|recovers after a failed selected-text explanation|saved inline question markers"`
+  - `npm test -- src/App.test.tsx -t "manual explanation|selected text|inline question|位置提问|formula|math|explanation text"`
+  - `npm test`
+  - `npm run build`
+
 ### 2026-05-28 - Inline Question Dialog Rendering
 
 - Fixed the inline "在此处提问" dialog so opening it no longer dims the workspace behind it.
