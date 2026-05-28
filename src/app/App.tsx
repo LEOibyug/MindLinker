@@ -76,7 +76,6 @@ import {
 } from "../services/referenceCache";
 import { appendRuntimeLog } from "../services/runtimeLog";
 import { SettingsPage } from "../components/panels/SettingsPage";
-import { normalizePlainTextForAnchor } from "../domain/textAnchors";
 import { VectorStoreDialog } from "../components/panels/VectorStoreDialog";
 import {
   chunkMarkedTerms,
@@ -86,21 +85,12 @@ import {
   stripExplainableMarkers
 } from "../domain/markedTerms";
 import { usePersistentState, writeStoredValue } from "../services/persistentState";
+import { buildReaderContextMenuState } from "../components/reader/readerInteraction";
+import type { ReaderContextMenuState } from "../components/reader/readerInteraction";
 import { NewConversationPanel } from "../components/home/NewConversationPanel";
 import { HomePage } from "../components/home/HomePage";
 import { AppChrome } from "./AppChrome";
 import { WorkspaceView } from "./WorkspaceView";
-
-type ContextMenuState = {
-  x: number;
-  y: number;
-  selectedText: string;
-  anchorOffset?: number;
-  anchorLength?: number;
-  anchorText?: string;
-  sourceExplanationTerm?: string;
-  sourceExplanationBody?: string;
-} | null;
 
 const emptyKnowledgeGraph: ConversationKnowledgeGraph = {
   nodes: [],
@@ -120,57 +110,6 @@ const emptyProject: LearningProject = {
   title: "",
   documents: [],
   conversations: [emptyConversation]
-};
-
-const findNthOccurrenceOffset = (text: string, needle: string, occurrenceIndex: number) => {
-  if (!needle) {
-    return 0;
-  }
-  let offset = -1;
-  let fromIndex = 0;
-  for (let index = 0; index <= occurrenceIndex; index += 1) {
-    offset = text.indexOf(needle, fromIndex);
-    if (offset === -1) {
-      return text.indexOf(needle);
-    }
-    fromIndex = offset + needle.length;
-  }
-  return offset;
-};
-
-const getRangeOffsetWithinElement = (range: Range, container: HTMLElement) => {
-  const prefixRange = range.cloneRange();
-  prefixRange.selectNodeContents(container);
-  prefixRange.setEnd(range.startContainer, range.startOffset);
-  return normalizePlainTextForAnchor(prefixRange.toString()).length;
-};
-
-const getElementAnchorOffset = (element: HTMLElement, root: HTMLElement, fallbackText: string) => {
-  const blockText = normalizePlainTextForAnchor(fallbackText || element.textContent || "");
-  if (!blockText) {
-    return 0;
-  }
-  const rootText = normalizePlainTextForAnchor(root.textContent || "");
-  return Math.max(0, rootText.indexOf(blockText));
-};
-
-const getCaretRangeFromPoint = (x: number, y: number) => {
-  const doc = document as Document & {
-    caretRangeFromPoint?: (x: number, y: number) => Range | null;
-    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
-  };
-  const range = doc.caretRangeFromPoint?.(x, y);
-  if (range) {
-    return range;
-  }
-  const position = doc.caretPositionFromPoint?.(x, y);
-  if (!position) {
-    return null;
-  }
-  const nextRange = document.createRange();
-  nextRange.setStart(position.offsetNode, position.offset);
-  nextRange.collapse(true);
-  return nextRange;
 };
 
 const waitForMinimumGenerationFrame = () => new Promise((resolve) => window.setTimeout(resolve, 480));
@@ -198,7 +137,7 @@ export function App() {
     "mindlinker.conversationExplanations",
     {}
   );
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [contextMenu, setContextMenu] = useState<ReaderContextMenuState>(null);
   const [rewriteDraft, setRewriteDraft] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsReturnView, setSettingsReturnView] = useState<"home" | "workspace">("home");
@@ -1095,49 +1034,16 @@ export function App() {
 
   const openReaderMenu = (event: React.MouseEvent<HTMLElement>) => {
     event.preventDefault();
-    const rootElement = event.currentTarget;
-    const sourceExplanationElement =
-      event.target instanceof HTMLElement
-        ? event.target.closest<HTMLElement>("[data-explanation-term]")
-        : null;
-    const sourceExplanationTerm = sourceExplanationElement?.dataset.explanationTerm;
-    const sourceExplanationBody = sourceExplanationTerm
-      ? availableExplanations.find((explanation) => explanation.term === sourceExplanationTerm)?.body
-      : undefined;
-    const selection = window.getSelection();
-    const selectedTextFromRange = selection?.toString().trim() ?? "";
-    const selectionRange =
-      selectedTextFromRange && selection?.rangeCount && rootElement.contains(selection.anchorNode)
-        ? selection.getRangeAt(0)
-        : null;
-    const selectableElement = event.target instanceof HTMLElement
-      ? event.target.closest<HTMLElement>("[data-selectable-text]")
-      : null;
-    const selectedText = selectedTextFromRange || selectableElement?.dataset.selectableText?.trim() || "";
-    const clickedElement = event.target instanceof HTMLElement ? event.target : rootElement;
-    const clickedBlock = clickedElement.closest<HTMLElement>("p, li, h1, h2, h3, .formula-block");
-    const clickedRange = selectedText ? null : getCaretRangeFromPoint(event.clientX, event.clientY);
-    const fullAnswerText = normalizePlainTextForAnchor(rootElement.textContent || activeDraft?.answerMarkdown || "");
-    const anchorOffset = selectionRange
-      ? getRangeOffsetWithinElement(selectionRange, rootElement)
-      : selectableElement
-        ? getElementAnchorOffset(selectableElement, rootElement, selectedText)
-        : clickedRange && rootElement.contains(clickedRange.startContainer)
-          ? getRangeOffsetWithinElement(clickedRange, rootElement)
-          : clickedBlock
-            ? getElementAnchorOffset(clickedBlock, rootElement, clickedBlock.textContent || "")
-            : getElementAnchorOffset(clickedElement, rootElement, clickedElement.textContent || "");
-    const anchorText = selectedText || normalizePlainTextForAnchor((clickedBlock ?? clickedElement).textContent || "").slice(0, 18) || "当前位置";
-    setContextMenu({
-      x: event.clientX,
-      y: event.clientY,
-      selectedText,
-      anchorOffset: Math.min(Math.max(0, anchorOffset), fullAnswerText.length),
-      anchorLength: selectedText ? normalizePlainTextForAnchor(selectedText).length : 0,
-      anchorText,
-      sourceExplanationTerm,
-      sourceExplanationBody
-    });
+    setContextMenu(
+      buildReaderContextMenuState({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        rootElement: event.currentTarget,
+        target: event.target,
+        fallbackMarkdown: activeDraft?.answerMarkdown ?? "",
+        explanations: availableExplanations
+      })
+    );
   };
 
   const createManualExplanation = async () => {

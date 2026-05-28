@@ -12,6 +12,19 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Reader Context Menu Anchor Refactor
+
+- Extracted reader right-click/selection anchor calculation from `App.tsx` into `components/reader/readerInteraction.ts`.
+- Moved DOM helpers for selection offsets, element fallback offsets, caret-range lookup, and context-menu state construction behind a tested reader interaction boundary.
+- Replaced the large `openReaderMenu` body in `App.tsx` with a single call to `buildReaderContextMenuState`.
+- Added DOM-level tests for repeated text offsets, selection offsets, normalized explainable-marker text offsets, and explanation-card source context.
+- Reduced `App.tsx` from roughly 1,829 lines to roughly 1,735 lines.
+- Verification:
+  - `npm test -- --run src/components/reader/readerInteraction.test.ts`
+  - `npm test -- --run src/app/App.test.tsx -t "context menu|selection actions|manual explanation|right-click position|selected text|position question|位置提问|formula block|inline question markers|renders position question"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Inline Conversation Rules Refactor
 
 - Moved inline-question draft, saved conversation, and summary-title construction rules into `domain/inlineConversations.ts`.
