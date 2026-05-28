@@ -3258,6 +3258,47 @@ describe("MindLinker shell", () => {
     expect(screen.queryByText(/##### 5/)).not.toBeInTheDocument();
   });
 
+  it("renders markdown tables with formulas instead of raw pipe text", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await configureMockChatApi(
+      user,
+      "核心关系如下：\n\n| 概念 | 核心不等式/性质 | 关键函数/工具 |\n| :--- | :--- | :--- |\n| KL 散度 | $D_{KL}(p\\Vert q) \\ge 0$ | Jensen 不等式 / Log-sum 不等式 |\n| 熵 | $H(p) \\le \\log |\\mathcal{X}|$ | $H(p)=\\log |\\mathcal{X}|-D_{KL}(p\\Vert u)$ |"
+    );
+
+    await user.type(screen.getByLabelText("学习问题"), "总结核心关系");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    expect(await screen.findByText(/核心关系如下/)).toBeInTheDocument();
+    const table = document.querySelector<HTMLElement>(".answer-table");
+    expect(table).toBeInTheDocument();
+    if (!table) {
+      throw new Error("Expected rendered answer table");
+    }
+    expect(within(table).getByRole("columnheader", { name: "概念" })).toBeInTheDocument();
+    expect(within(table).getByText("KL 散度")).toBeInTheDocument();
+    expect(table.querySelectorAll(".inline-math .katex").length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText(/\| :---/)).not.toBeInTheDocument();
+  });
+
+  it("keeps indented formula continuations inside their list item", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await configureMockChatApi(
+      user,
+      "- 右边 = $(\\sum_i p_i x_i)$。\n  $\\log(\\sum_i p_i x_i)=\\mathbb{E}[X]\\log\\mathbb{E}[X]$"
+    );
+
+    await user.type(screen.getByLabelText("学习问题"), "推导 Jensen 右边");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    expect(await screen.findByText(/右边/)).toBeInTheDocument();
+    const item = screen.getByRole("listitem");
+    expect(item).toHaveTextContent("右边");
+    expect(item.querySelectorAll(".inline-math .katex").length).toBeGreaterThanOrEqual(2);
+    expect(document.querySelector(".formula-block")).not.toBeInTheDocument();
+  });
+
   it("does not turn explanatory list items with inline formulas into formula blocks", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();

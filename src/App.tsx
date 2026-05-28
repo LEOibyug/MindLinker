@@ -1608,13 +1608,52 @@ const isStandaloneMathLine = (line: string) => {
 
 type AnswerBlock =
   | { kind: "text"; text: string }
-  | { kind: "formula"; text: string };
+  | { kind: "formula"; text: string }
+  | { kind: "table"; rows: string[][] };
+
+const isMarkdownTableRow = (line: string) => {
+  const trimmed = line.trim();
+  return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.split("|").length >= 4;
+};
+
+const isMarkdownTableSeparatorRow = (line: string) =>
+  isMarkdownTableRow(line) && line
+    .trim()
+    .slice(1, -1)
+    .split("|")
+    .every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+
+const splitMarkdownTableCells = (content: string) => {
+  const cells: string[] = [];
+  let current = "";
+  let inInlineMath = false;
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    const previousChar = content[index - 1];
+    if (char === "$" && previousChar !== "\\") {
+      inInlineMath = !inInlineMath;
+      current += char;
+      continue;
+    }
+    if (char === "|" && !inInlineMath) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current.trim());
+  return cells;
+};
+
+const parseMarkdownTableRow = (line: string) => splitMarkdownTableCells(line.trim().slice(1, -1));
 
 const parseAnswerBlocks = (text: string): AnswerBlock[] => {
   const lines = text.split(/\n/);
   const blocks: AnswerBlock[] = [];
   const paragraphLines: string[] = [];
   let formulaLines: string[] = [];
+  let tableRows: string[][] = [];
   let inFormula = false;
 
   const flushParagraph = () => {
@@ -1633,10 +1672,18 @@ const parseAnswerBlocks = (text: string): AnswerBlock[] => {
     formulaLines = [];
   };
 
+  const flushTable = () => {
+    if (tableRows.length > 0) {
+      blocks.push({ kind: "table", rows: tableRows });
+      tableRows = [];
+    }
+  };
+
   lines.forEach((rawLine) => {
     const line = stripMarkdownQuotePrefix(rawLine);
     const trimmed = line.trim();
     if (/^```(?:math|latex|tex)?\s*$/i.test(trimmed)) {
+      flushTable();
       if (inFormula) {
         flushFormula();
         inFormula = false;
@@ -1647,6 +1694,7 @@ const parseAnswerBlocks = (text: string): AnswerBlock[] => {
       return;
     }
     if (trimmed === "$$" || trimmed === "\\[" || trimmed === "\\]") {
+      flushTable();
       if (inFormula) {
         flushFormula();
         inFormula = false;
@@ -1657,16 +1705,26 @@ const parseAnswerBlocks = (text: string): AnswerBlock[] => {
       return;
     }
     if (trimmed.startsWith("\\[") && trimmed.endsWith("\\]") && trimmed.length > 4) {
+      flushTable();
       flushParagraph();
       blocks.push({ kind: "formula", text: normalizeMathExpression(trimmed.slice(2, -2)) });
       return;
     }
     if (trimmed.startsWith("$$") && trimmed.endsWith("$$") && trimmed.length > 4) {
+      flushTable();
       flushParagraph();
       blocks.push({ kind: "formula", text: normalizeMathExpression(trimmed.slice(2, -2)) });
       return;
     }
-    if (!inFormula && isStandaloneMathLine(line)) {
+    if (!inFormula && isMarkdownTableRow(line)) {
+      flushParagraph();
+      if (!isMarkdownTableSeparatorRow(line)) {
+        tableRows.push(parseMarkdownTableRow(line));
+      }
+      return;
+    }
+    flushTable();
+    if (!inFormula && !/^\s+\S/.test(rawLine) && isStandaloneMathLine(line)) {
       flushParagraph();
       blocks.push({ kind: "formula", text: normalizeMathLine(line) });
       return;
@@ -1681,6 +1739,7 @@ const parseAnswerBlocks = (text: string): AnswerBlock[] => {
   if (inFormula) {
     flushFormula();
   }
+  flushTable();
   flushParagraph();
   return blocks;
 };
@@ -1734,7 +1793,8 @@ const renderAnswerText = (
   const textBoundTerms = bindExplanationsToAnswerText(text, terms);
   const blocks = parseAnswerBlocks(text);
   const elements: ReactNode[] = [];
-  let listItems: string[] = [];
+  let listItems: { id: number; content: ReactNode }[] = [];
+  let listItemIndex = 0;
   const flushList = () => {
     if (listItems.length === 0) {
       return;
@@ -1743,7 +1803,7 @@ const renderAnswerText = (
     elements.push(
       <ul key={`list-${elements.length}`} className="answer-list">
         {currentItems.map((item) => (
-          <li key={item}>{renderInlineAnswerWithTerms(item, textBoundTerms, annotationsRevealed, openExplanation)}</li>
+          <li key={`item-${item.id}`}>{item.content}</li>
         ))}
       </ul>
     );
@@ -1760,17 +1820,66 @@ const renderAnswerText = (
       );
       return;
     }
+    if (block.kind === "table") {
+      flushList();
+      const [header = [], ...bodyRows] = block.rows;
+      elements.push(
+        <div className="answer-table-wrap" key={`table-${elements.length}`}>
+          <table className="answer-table">
+            <thead>
+              <tr>
+                {header.map((cell, index) => (
+                  <th key={`head-${index}`}>{renderInlineAnswerWithTerms(cell, textBoundTerms, annotationsRevealed, openExplanation)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {bodyRows.map((row, rowIndex) => (
+                <tr key={`row-${rowIndex}`}>
+                  {row.map((cell, cellIndex) => (
+                    <td key={`cell-${rowIndex}-${cellIndex}`}>
+                      {renderInlineAnswerWithTerms(cell, textBoundTerms, annotationsRevealed, openExplanation)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      return;
+    }
 
     block.text
       .split(/\n+/)
-      .map((line) => line.trim())
-      .forEach((line) => {
+      .forEach((rawLine) => {
+        const line = rawLine.trim();
         if (!line || line === "---") {
           flushList();
           return;
         }
         if (isMarkdownListLine(line)) {
-          listItems.push(line.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, ""));
+          listItems.push({
+            id: listItemIndex,
+            content: renderInlineAnswerWithTerms(
+              line.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, ""),
+              textBoundTerms,
+              annotationsRevealed,
+              openExplanation
+            )
+          });
+          listItemIndex += 1;
+          return;
+        }
+        if (listItems.length > 0 && /^\s+\S/.test(rawLine)) {
+          const lastItem = listItems[listItems.length - 1];
+          lastItem.content = (
+            <>
+              {lastItem.content}
+              <br />
+              {renderInlineAnswerWithTerms(line, textBoundTerms, annotationsRevealed, openExplanation)}
+            </>
+          );
           return;
         }
         flushList();

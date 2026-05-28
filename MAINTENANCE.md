@@ -177,3 +177,19 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "formula|math|markdown wrappers|inline math|inline code|fenced|code fences|backticks|blockquote|quoted"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - Markdown Table And List Continuation Rendering
+
+- Added renderer support for Markdown tables in model answers so pipe-delimited rows no longer appear as raw text.
+- Table cells reuse the existing inline renderer, so terms, bold text, and inline KaTeX formulas still render inside cells.
+- Table parsing now ignores pipe characters inside inline math such as `|\mathcal{X}|`.
+- Indented continuation lines after a list item now stay inside the preceding bullet and keep inline formula rendering, instead of being promoted to a separate formula block.
+- Regression coverage:
+  - Markdown tables render as `.answer-table` with header cells and inline formulas;
+  - indented formula continuations remain inside their list item;
+  - prior formula, Markdown wrapper, blockquote, heading, and list-item regressions remain covered.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "markdown tables|indented formula continuations"`
+  - `npm test -- src/App.test.tsx -t "formula|math|markdown wrappers|markdown tables|inline math|inline code|fenced|code fences|backticks|blockquote|quoted|list items|headings"`
+  - `npm test`
+  - `npm run build`
