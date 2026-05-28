@@ -73,3 +73,18 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "graph|formula|math|streams the main answer|incomplete markup"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - Formula Delimiter Normalization
+
+- Tightened the main-answer prompt so models must emit display formulas with `$$` on their own lines and use plain `$...$` or `\(...\)` for inline formulas.
+- Added renderer tolerance for model replies that still contain escaped inline dollar delimiters or inline `$$...$$` fragments inside prose.
+- Prevented prose-prefixed `$$...$$` lines such as `即 $$...$$` from being mistaken for standalone formula blocks.
+- Regression coverage:
+  - escaped inline dollar formulas render through KaTeX without visible dollar markers;
+  - prose-prefixed inline display delimiters no longer leak raw `$$` or TeX text into visible output;
+  - main model requests include strict formula delimiter rules.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "escaped inline dollar|inline display delimiters|strict formula delimiter"`
+  - `npm test -- src/App.test.tsx -t "formula|math|quoted|markdown wrappers|inline math"`
+  - `npm test`
+  - `npm run build`

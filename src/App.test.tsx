@@ -256,6 +256,39 @@ describe("MindLinker shell", () => {
     expect(requestBody).not.toMatch(/教师|老师|讲课|上课|角色|像.*一样/);
   });
 
+  it("sends strict formula delimiter rules to the main model", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(window, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: "这是包含公式格式约束的回答。"
+            }
+          }
+        ]
+      })
+    } as Response);
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+
+    await user.type(screen.getByLabelText("学习问题"), "讲 Jensen 公式");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    await screen.findByText("这是包含公式格式约束的回答。");
+    const requestBody = String(fetchMock.mock.calls[0]?.[1]?.body ?? "");
+    const requestText = JSON.parse(requestBody).messages[0].content[0].text;
+    expect(requestText).toContain("块级公式必须使用三行标准格式");
+    expect(requestText).toContain("$$ 所在行只能包含 $$");
+    expect(requestText).toContain("禁止写成“即 $$...$$”");
+    expect(requestText).toContain("不要写成 \\$...\\$");
+  });
+
   it("keeps a generated answer visible after the generation animation finishes", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();
@@ -3007,6 +3040,45 @@ describe("MindLinker shell", () => {
     });
     expect(screen.getByText(/是常数/)).toBeInTheDocument();
     expect(screen.queryByText(/\$X\$/)).not.toBeInTheDocument();
+  });
+
+  it("renders escaped inline dollar formulas without leaking dollar markers", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await configureMockChatApi(user, "对于凹函数，不等号方向相反：\\$\\mathbb{E}[f(X)] \\le f(\\mathbb{E}[X])\\$。");
+    await user.type(screen.getByLabelText("学习问题"), "讲凹函数");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    await waitFor(() => expect(document.querySelector(".draft-answer .inline-math .katex")).toBeInTheDocument());
+    expect(screen.queryByText(/\$\\mathbb/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\\\$/)).not.toBeInTheDocument();
+    expect(screen.getByText(/不等号方向相反/)).toBeInTheDocument();
+  });
+
+  it("normalizes inline display delimiters with prose prefixes instead of showing raw formula blocks", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await configureMockChatApi(
+      user,
+      "Jensen不等式给出：\n\n即 $$ -\\frac{1}{n} \\sum_{i=1}^n \\log x_i \\ge -\\log \\left( \\frac{1}{n} \\sum_{i=1}^n x_i \\right) $$\n\n整理后即得几何平均 $$ \\sqrt[n]{x_1x_2\\cdots x_n} \\le \\frac{1}{n}\\sum_{i=1}^n x_i $$。"
+    );
+    await user.type(screen.getByLabelText("学习问题"), "讲 AM-GM");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    await waitFor(() => expect(document.querySelector(".draft-answer .inline-math .katex")).toBeInTheDocument());
+    expect(screen.getByText(/Jensen不等式给出/)).toBeInTheDocument();
+    expect(screen.getByText(/整理后即得几何平均/)).toBeInTheDocument();
+    const visibleTextNodes: string[] = [];
+    const walker = document.createTreeWalker(document.querySelector(".draft-answer")!, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      if (!(node.parentElement?.closest(".katex"))) {
+        visibleTextNodes.push(node.textContent ?? "");
+      }
+      node = walker.nextNode();
+    }
+    expect(visibleTextNodes.join("")).not.toMatch(/\$\$|\\frac/);
+    expect(document.querySelector(".draft-answer .formula-block")).not.toBeInTheDocument();
   });
 
   it("renders bracket display math and inline math containing parentheses without raw delimiters", async () => {
