@@ -289,6 +289,32 @@ describe("MindLinker shell", () => {
     expect(requestText).toContain("不要写成 \\$...\\$");
   });
 
+  it("sends strict explainable marker grammar to the main model", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(window, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "这是包含解释标记格式约束的回答。" } }]
+      })
+    } as Response);
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+
+    await user.type(screen.getByLabelText("学习问题"), "讲 Jensen 标记");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    await screen.findByText("这是包含解释标记格式约束的回答。");
+    const requestBody = String(fetchMock.mock.calls[0]?.[1]?.body ?? "");
+    const requestText = JSON.parse(requestBody).messages[0].content[0].text;
+    expect(requestText).toContain("裸 [[id]] 是非法格式");
+    expect(requestText).toContain("[[convex-function]]");
+    expect(requestText).toContain("[[ml:convex-function]]凸函数[[/ml]]");
+  });
+
   it("keeps a generated answer visible after the generation animation finishes", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();
@@ -602,6 +628,23 @@ describe("MindLinker shell", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "对话 解释带 id 的闭合标记 正在生成" })).not.toBeInTheDocument());
   });
 
+  it("strips bare bracket ids from rendered main answers", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await configureMockChatApi(
+      user,
+      "Jensen不等式是 [[convex-function]] 性质在期望运算下的推广。对于 [[convex-function]] f，不等式成立。"
+    );
+
+    await user.type(screen.getByLabelText("学习问题"), "解释 Jensen");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    const reader = screen.getByRole("article", { name: "回答正文" });
+    expect(await within(reader).findByText(/Jensen不等式是 convex-function 性质/)).toBeInTheDocument();
+    expect(within(reader).queryByText(/\[\[convex-function\]\]/)).not.toBeInTheDocument();
+    expect(within(reader).queryByText(/\[\[/)).not.toBeInTheDocument();
+  });
+
   it("does not blank the reader if draft persistence fails during streaming", async () => {
     const user = userEvent.setup();
     const encoder = new TextEncoder();
@@ -707,6 +750,54 @@ describe("MindLinker shell", () => {
     expect(explanationCall).toBeTruthy();
     expect(String(explanationCall?.[1]?.body ?? "")).toContain("term-cross-entropy");
     expect(String(explanationCall?.[1]?.body ?? "")).toContain("为了提升缓存命中");
+  });
+
+  it("sends strict nested marker grammar to the explanation model", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
+      const body = String(init?.body ?? "");
+      const isExplanationRequest = body.includes("待解释词表");
+      const isTitleRequest = body.includes("项目标题生成任务");
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: isTitleRequest
+                  ? "Jensen不等式"
+                  : isExplanationRequest
+                    ? JSON.stringify([
+                        {
+                          id: "term-jensen",
+                          term: "Jensen不等式",
+                          body: "Jensen不等式来自凸性。",
+                          source: "来源：当前回答"
+                        }
+                      ])
+                    : "这里介绍 [[ml:term-jensen]]Jensen不等式[[/ml]]。"
+              }
+            }
+          ]
+        })
+      } as Response;
+    });
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+
+    await user.type(screen.getByLabelText("学习问题"), "讲 Jensen");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => String(init?.body ?? "").includes("待解释词表"))).toBe(true));
+    const explanationCall = fetchMock.mock.calls.find(([, init]) => String(init?.body ?? "").includes("待解释词表"));
+    const requestText = JSON.parse(String(explanationCall?.[1]?.body ?? "")).messages[0].content;
+    expect(requestText).toContain("裸 [[id]] 是非法格式");
+    expect(requestText).toContain("[[convex-function]]");
+    expect(requestText).toContain("[[ml:convex-function]]凸函数[[/ml]]");
   });
 
   it("strips malformed closing explainable markers with ids from the rendered answer", async () => {
@@ -1170,6 +1261,53 @@ describe("MindLinker shell", () => {
     expect(card).toHaveTextContent("entropy 熵");
     expect(card?.textContent).not.toContain("]]");
     expect(card?.textContent).not.toContain("[[/ml");
+  });
+
+  it("strips bare bracket ids from explanation card text", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
+      const body = String(init?.body ?? "");
+      const isExplanationRequest = body.includes("待解释词表");
+      const isTitleRequest = body.includes("项目标题生成任务");
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: isTitleRequest
+                  ? "Jensen不等式"
+                  : isExplanationRequest
+                    ? JSON.stringify([
+                        {
+                          id: "term-jensen",
+                          term: "Jensen不等式",
+                          body: "Jensen不等式是 [[convex-function]] 性质在期望运算下的推广。",
+                          source: "来源：模型解释"
+                        }
+                      ])
+                    : "这里介绍 [[ml:term-jensen]]Jensen不等式[[/ml]]。"
+              }
+            }
+          ]
+        })
+      } as Response;
+    });
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    await user.type(screen.getByLabelText("学习问题"), "解释 Jensen");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "解释 Jensen不等式" })).toHaveClass("revealed"));
+    await user.click(screen.getByRole("button", { name: "解释 Jensen不等式" }));
+
+    const card = screen.getByRole("heading", { name: "Jensen不等式" }).closest(".explanation-card");
+    expect(card).toHaveTextContent("Jensen不等式是 convex-function 性质在期望运算下的推广");
+    expect(card?.textContent).not.toContain("[[convex-function]]");
+    expect(card?.textContent).not.toContain("[[");
   });
 
   it("renders bold markers correctly when explainable terms split emphasized text", async () => {

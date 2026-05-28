@@ -88,3 +88,19 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "formula|math|quoted|markdown wrappers|inline math"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - Marker Grammar Alignment
+
+- Tightened both main-answer and explanation-chain prompts to forbid bare `[[id]]` markers and require `[[ml:id]]term[[/ml]]`.
+- Unified malformed marker cleanup so leaked bare bracket ids such as `[[convex-function]]` render as plain text instead of exposing internal syntax.
+- Applied the cleanup to main answers and explanation card text without changing valid explanation links.
+- Regression coverage:
+  - bare bracket ids are stripped from rendered main answers;
+  - bare bracket ids are stripped from explanation card text;
+  - main-answer requests include strict explainable marker grammar;
+  - explanation-chain requests include the same nested marker grammar.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "bare bracket ids|explainable marker grammar|nested marker grammar"`
+  - `npm test -- src/App.test.tsx -t "marker|markers|explanation text|explanation links|malformed|graph details|streaming visible|marked terms"`
+  - `npm test`
+  - `npm run build`

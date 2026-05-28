@@ -312,7 +312,8 @@ const stripExplainableMarkers = (text: string) => parseMarkedAnswer(text).cleanM
 const stripMalformedExplainableMarkers = (text: string) =>
   text
     .replace(/\[\[\/ml(?::[^\]\n]+)?\]\]/g, "")
-    .replace(/\[\[ml:([^\]\n]+)\]\]/g, (_match, rawId: string) => rawId.trim());
+    .replace(/\[\[ml:([^\]\n]+)\]\]/g, (_match, rawId: string) => rawId.trim())
+    .replace(/\[\[([^\]\n]{1,100})\]\]/g, (_match, rawId: string) => rawId.trim());
 
 const parseBoldSegments = (text: string) => {
   const segments: Array<{ text: string; bold: boolean }> = [];
@@ -940,7 +941,7 @@ const requestChatCompletion = async (
   const instruction = {
     type: "input_text" as const,
     text:
-      `你是面向课程学习、理论知识和论文阅读的学习助手。请严格依据用户上传的参考材料优先回答；如果参考不足，明确说明。输出只包含给用户看的主回复正文，不要输出内部字段名、JSON、调试信息或 answer-xxx 标签。不要以“好的”、“当然”、“我是...助手”、“我将基于...”、“下面我将...”这类寒暄、自我介绍或任务复述开头；不要自我介绍，不要说明你会做什么，直接进入实质内容或合适的标题。\n\n解释标记格式必须严格遵守：\n- 只允许使用 [[ml:stable-english-id]]术语[[/ml]]。\n- 结束标签必须永远是 [[/ml]]，严禁写成 [[/ml:stable-english-id]] 或任何带 id 的结束标签。\n- id 只使用小写英文、数字和连字符，每个可解释点使用语义化且尽量唯一的 id，不要复用 stable-english-id 这个示例 id。\n- 正确示例：[[ml:cross-entropy]]交叉熵[[/ml]] 会衡量两个分布的差异。\n- 错误示例：[[ml:cross-entropy]]交叉熵[[/ml:cross-entropy]]。\n- 同一位置一个标记，不要跨句标记，不要标记整段句子。\n\n请主动为关键词、专有名词、理论概念、定理、公式名、符号含义、方法名和容易产生误解的短语添加解释标记。不要漏掉正文中的核心概念，宁可多标几个可解释点。\n\n数学公式格式必须严格遵守：\n- 数学公式使用 LaTeX。\n- 行内公式使用 $...$ 或 \\(...\\)，不要写成 \\$...\\$。\n- 块级公式必须使用三行标准格式：第一行只写 $$，第二行只写公式本体，第三行只写 $$。\n- $$ 所在行只能包含 $$，不能包含“即”“公式为”等任何正文。\n- 禁止写成“即 $$...$$”“公式：$$...$$”或把句末标点放进公式分隔符。\n- 分式必须写成 \\frac{...}{...}，例如 \\log\\frac{1}{p(x)}，不要写成 1/p(x) 这类斜杠形式。\n\n${answerModePrompts[answerMode].instruction}`
+      `你是面向课程学习、理论知识和论文阅读的学习助手。请严格依据用户上传的参考材料优先回答；如果参考不足，明确说明。输出只包含给用户看的主回复正文，不要输出内部字段名、JSON、调试信息或 answer-xxx 标签。不要以“好的”、“当然”、“我是...助手”、“我将基于...”、“下面我将...”这类寒暄、自我介绍或任务复述开头；不要自我介绍，不要说明你会做什么，直接进入实质内容或合适的标题。\n\n解释标记格式必须严格遵守：\n- 只允许使用 [[ml:stable-english-id]]术语[[/ml]]。\n- 结束标签必须永远是 [[/ml]]，严禁写成 [[/ml:stable-english-id]] 或任何带 id 的结束标签。\n- id 只使用小写英文、数字和连字符，每个可解释点使用语义化且尽量唯一的 id，不要复用 stable-english-id 这个示例 id。\n- 正确示例：[[ml:cross-entropy]]交叉熵[[/ml]] 会衡量两个分布的差异。\n- 错误示例：[[ml:cross-entropy]]交叉熵[[/ml:cross-entropy]]。\n- 错误示例：[[convex-function]]。裸 [[id]] 是非法格式；如果要标记凸函数，必须写成 [[ml:convex-function]]凸函数[[/ml]]。\n- 同一位置一个标记，不要跨句标记，不要标记整段句子。\n\n请主动为关键词、专有名词、理论概念、定理、公式名、符号含义、方法名和容易产生误解的短语添加解释标记。不要漏掉正文中的核心概念，宁可多标几个可解释点。\n\n数学公式格式必须严格遵守：\n- 数学公式使用 LaTeX。\n- 行内公式使用 $...$ 或 \\(...\\)，不要写成 \\$...\\$。\n- 块级公式必须使用三行标准格式：第一行只写 $$，第二行只写公式本体，第三行只写 $$。\n- $$ 所在行只能包含 $$，不能包含“即”“公式为”等任何正文。\n- 禁止写成“即 $$...$$”“公式：$$...$$”或把句末标点放进公式分隔符。\n- 分式必须写成 \\frac{...}{...}，例如 \\log\\frac{1}{p(x)}，不要写成 1/p(x) 这类斜杠形式。\n\n${answerModePrompts[answerMode].instruction}`
   };
   const userPrompt = {
     type: "input_text" as const,
@@ -1110,7 +1111,7 @@ const requestExplanationChain = async (
     .map((term) => `${term.ordinal}. id=${term.id}; term=${term.term}`)
     .join("\n");
   const nestedMarkerInstruction = options.allowNestedMarkers
-    ? "解释正文 body 中如果确实出现还值得继续解释的术语，请使用 [[ml:stable-english-id]]术语[[/ml]] 标记；结束标签必须严格为 [[/ml]]，严禁写成 [[/ml:id]]；id 使用语义化英文小写短横线，不要复用 stable-english-id 这个示例 id；不要超过必要数量。"
+    ? "解释正文 body 中如果确实出现还值得继续解释的术语，请使用 [[ml:stable-english-id]]术语[[/ml]] 标记；结束标签必须严格为 [[/ml]]，严禁写成 [[/ml:id]]；裸 [[id]] 是非法格式，例如 [[convex-function]] 是错误写法，如果要标记凸函数，必须写成 [[ml:convex-function]]凸函数[[/ml]]；id 使用语义化英文小写短横线，不要复用 stable-english-id 这个示例 id；不要超过必要数量。"
     : "解释正文 body 中不要再生成任何 [[ml:id]]...[[/ml]] 待解释标记。";
   const prompt = `为了提升缓存命中，下面先复述上一阶段的对话前缀，再追加解释任务系统提示词。
 
