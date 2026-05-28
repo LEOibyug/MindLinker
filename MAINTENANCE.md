@@ -124,3 +124,25 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "prompt|marker|formula|math|title|位置提问|rewrite|重写|inline question|strict"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - XML Prompt Sections
+
+- Replaced Chinese bracket prompt sections such as `【任务】` and `【输出格式】` with XML-style tags.
+- Model-facing prompts now use sections such as:
+  - `<task>`
+  - `<input>`
+  - `<output_format>`
+  - `<json_output_protocol>`
+  - `<explainable_marker_protocol>`
+  - `<math_formula_protocol>`
+  - `<prohibitions>`
+- Kept the existing marker and formula instructions unchanged in meaning while making the structure friendlier for model parsing.
+- Regression coverage:
+  - main-answer, explanation-chain, title, inline-question, and rewrite prompts use XML-style sections;
+  - old Chinese bracket sections are no longer present in checked model prompts;
+  - marker, formula, title, rewrite, and inline-question behavior remains stable.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "strict formula delimiter|strict explainable marker grammar|strict nested marker grammar|project title in parallel|inserted question|rewrite draft"`
+  - `npm test -- src/App.test.tsx -t "prompt|marker|formula|math|title|位置提问|rewrite|重写|inline question|strict"`
+  - `npm test`
+  - `npm run build`
