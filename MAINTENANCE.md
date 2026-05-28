@@ -12,6 +12,17 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Model Client Boundary Refactor
+
+- Split `services/modelClient.ts` into a thin orchestration facade plus `services/modelClient/protocol.ts` for prompt/protocol builders and `services/modelClient/transport.ts` for provider endpoint/header and response parsing utilities.
+- Preserved the existing public `modelClient.ts` exports so app hooks and UI callers did not need a broad import migration.
+- Added boundary tests for OpenAI-compatible vs Responses endpoint construction, optional bearer headers, and streaming delta extraction.
+- Reduced `modelClient.ts` from roughly 820 lines to roughly 363 lines.
+- Verification:
+  - `npm test -- --run src/services/modelClient.test.ts`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - App Directory Structure Refactor
 
 - Moved app-level action hooks into `app/hooks/` so project, workspace, explanation, inline-question, provider, and generation orchestration live behind a single folder boundary.

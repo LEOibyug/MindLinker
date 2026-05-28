@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { extractTextFromModelPayload, findChatModelConfig } from "./modelClient";
+import {
+  buildProviderEndpoint,
+  buildProviderHeaders,
+  extractStreamTextFromPayload,
+  extractTextFromModelPayload,
+  findChatModelConfig
+} from "./modelClient";
 import type { ProviderConfig } from "../domain/types";
 
 const providers: ProviderConfig[] = [
@@ -49,5 +55,44 @@ describe("modelClient", () => {
         choices: [{ message: { content: [{ text: "chat" }, { content: " array" }] } }]
       })
     ).toBe("chat array");
+  });
+
+  it("builds OpenAI compatible and Responses endpoints without duplicate path suffixes", () => {
+    expect(buildProviderEndpoint({ ...providers[1], baseUrl: "https://api.local.test/v1" })).toBe(
+      "https://api.local.test/v1/chat/completions"
+    );
+    expect(buildProviderEndpoint({ ...providers[1], baseUrl: "https://api.local.test/v1/chat/completions/" })).toBe(
+      "https://api.local.test/v1/chat/completions"
+    );
+    expect(
+      buildProviderEndpoint({
+        ...providers[1],
+        apiFormat: "openai-responses",
+        baseUrl: "https://api.local.test/v1"
+      })
+    ).toBe("https://api.local.test/v1/responses");
+    expect(
+      buildProviderEndpoint({
+        ...providers[1],
+        apiFormat: "openai-responses",
+        baseUrl: "https://api.local.test/v1/responses/"
+      })
+    ).toBe("https://api.local.test/v1/responses");
+  });
+
+  it("builds provider headers with optional bearer tokens", () => {
+    expect(buildProviderHeaders({ ...providers[1], apiKey: "  key-123  " })).toEqual({
+      "Content-Type": "application/json",
+      Authorization: "Bearer key-123"
+    });
+    expect(buildProviderHeaders({ ...providers[1], apiKey: " " })).toEqual({
+      "Content-Type": "application/json"
+    });
+  });
+
+  it("extracts streaming deltas from OpenAI chat and Responses events", () => {
+    expect(extractStreamTextFromPayload({ choices: [{ delta: { content: "chat" } }] })).toBe("chat");
+    expect(extractStreamTextFromPayload({ type: "response.output_text.delta", delta: "response" })).toBe("response");
+    expect(extractStreamTextFromPayload({ part: { text: "part" } })).toBe("part");
   });
 });
