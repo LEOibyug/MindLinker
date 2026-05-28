@@ -20,3 +20,21 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm run build` passes.
 - Known active user-reported issue after baseline planning:
   - Explanation links may still fail to render back into the main answer in some real generated outputs; fix should be committed separately with a focused regression test.
+
+### 2026-05-28 - Runtime Logging
+
+- Added a structured runtime log for debugging real model-generation failures.
+- Renderer events are kept in `mindlinker.runtimeLogs` as a browser/test fallback.
+- Electron writes daily JSON-lines logs under the app user data directory in `runtime-logs/`.
+- Log lifecycle:
+  - Local fallback keeps the latest 600 entries from the last 7 days.
+  - Electron prunes log files older than 7 days.
+  - API keys, authorization headers, tokens, and secrets are filtered from metadata.
+- Logged model lifecycle now includes:
+  - main-answer request start, raw model reply, streaming progress, marker parsing;
+  - explanation-chain request start, raw model reply, parsed explanation count;
+  - title generation, inline question calls, manual explanation calls, and settings connection tests.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "records model replies"`
+  - `npm test`
+  - `npm run build`

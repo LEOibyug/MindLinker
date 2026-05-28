@@ -30,6 +30,7 @@ import type { ConversationKnowledgeGraph } from "./domain";
 import { KnowledgeGraphView } from "./KnowledgeGraphView";
 import { buildOpenAIInputParts, buildReferenceContext, parseReferenceFile } from "./pdfReferences";
 import type { ParsedReferenceDocument } from "./pdfReferences";
+import { appendRuntimeLog } from "./runtimeLog";
 
 type Explanation = {
   id?: string;
@@ -923,7 +924,8 @@ const requestChatCompletion = async (
   provider: ProviderConfig,
   model: ModelConfig,
   answerMode: AnswerMode = "balanced",
-  onDelta?: (text: string) => void
+  onDelta?: (text: string) => void,
+  runtimeContext: Record<string, unknown> = {}
 ) => {
   const baseUrl = provider.baseUrl.replace(/\/+$/, "");
   const endpoint =
@@ -941,6 +943,16 @@ const requestChatCompletion = async (
     text: `用户问题：${prompt}`
   };
 
+  appendRuntimeLog("model", "主模型请求开始", {
+    ...runtimeContext,
+    provider: provider.name,
+    model: model.name,
+    apiFormat: provider.apiFormat,
+    endpoint,
+    answerMode,
+    referenceCount: documents.length,
+    prompt
+  });
   const response = await fetch(endpoint, {
     method: "POST",
     headers: buildProviderHeaders(provider),
@@ -984,12 +996,19 @@ const requestChatCompletion = async (
   });
 
   if (!response.ok) {
+    appendRuntimeLog(
+      "model",
+      "主模型请求失败",
+      { ...runtimeContext, status: response.status, statusText: response.statusText },
+      "error"
+    );
     throw new Error(`模型请求失败：${response.status} ${response.statusText}`);
   }
   const contentType = response.headers?.get("Content-Type") ?? response.headers?.get("content-type") ?? "";
   if (contentType.includes("text/event-stream")) {
     const streamedText = await readSseTextStream(response, onDelta);
     if (streamedText) {
+      appendRuntimeLog("model", "主模型原始回复", { ...runtimeContext, answer: streamedText, transport: "sse" });
       return streamedText;
     }
   }
@@ -997,9 +1016,11 @@ const requestChatCompletion = async (
   const responsesText = payload.output_text;
   const chatText = payload.choices?.[0]?.message?.content;
   if (typeof responsesText === "string" && responsesText.trim()) {
+    appendRuntimeLog("model", "主模型原始回复", { ...runtimeContext, answer: responsesText.trim(), transport: "json" });
     return responsesText.trim();
   }
   if (typeof chatText === "string" && chatText.trim()) {
+    appendRuntimeLog("model", "主模型原始回复", { ...runtimeContext, answer: chatText.trim(), transport: "json" });
     return chatText.trim();
   }
   if (Array.isArray(chatText)) {
@@ -1008,9 +1029,11 @@ const requestChatCompletion = async (
       .join("")
       .trim();
     if (joined) {
+      appendRuntimeLog("model", "主模型原始回复", { ...runtimeContext, answer: joined, transport: "json-array" });
       return joined;
     }
   }
+  appendRuntimeLog("model", "主模型响应为空", { ...runtimeContext, payload }, "warn");
   throw new Error("模型响应中没有可显示的正文");
 };
 
@@ -1067,7 +1090,8 @@ const requestExplanationChain = async (
   provider: ProviderConfig,
   model: ModelConfig,
   referenceState: string,
-  options: { allowNestedMarkers?: boolean; reason?: "answer" | "manual" | "nested" } = {}
+  options: { allowNestedMarkers?: boolean; reason?: "answer" | "manual" | "nested" } = {},
+  runtimeContext: Record<string, unknown> = {}
 ) => {
   if (markedTerms.length === 0) {
     return [];
@@ -1102,6 +1126,17 @@ JSON 格式：
 
 待解释词表：
 ${termList}`;
+  appendRuntimeLog("model", "解释链请求开始", {
+    ...runtimeContext,
+    provider: provider.name,
+    model: model.name,
+    apiFormat: provider.apiFormat,
+    endpoint,
+    reason: options.reason ?? "answer",
+    termCount: markedTerms.length,
+    terms: markedTerms.map((term) => ({ id: term.id, term: term.term, ordinal: term.ordinal })),
+    referenceState
+  });
   const response = await fetch(endpoint, {
     method: "POST",
     headers: buildProviderHeaders(provider),
@@ -1118,9 +1153,24 @@ ${termList}`;
     )
   });
   if (!response.ok) {
+    appendRuntimeLog(
+      "model",
+      "解释链请求失败",
+      { ...runtimeContext, status: response.status, statusText: response.statusText, reason: options.reason ?? "answer" },
+      "error"
+    );
     throw new Error(`解释链请求失败：${response.status} ${response.statusText}`);
   }
-  return parseExplanationJson(extractTextFromModelPayload(await response.json()), referenceState);
+  const rawText = extractTextFromModelPayload(await response.json());
+  appendRuntimeLog("model", "解释链模型原始回复", { ...runtimeContext, rawText, reason: options.reason ?? "answer" });
+  const parsed = parseExplanationJson(rawText, referenceState);
+  appendRuntimeLog("model", "解释链解析完成", {
+    ...runtimeContext,
+    reason: options.reason ?? "answer",
+    parsedCount: parsed.length,
+    parsedTerms: parsed.map((item) => ({ id: item.id, term: item.term, nested: item.nested }))
+  });
+  return parsed;
 };
 
 const sanitizeProjectTitle = (title: string) => {
@@ -1187,6 +1237,15 @@ ${referenceTitles.length > 0 ? referenceTitles.join("、") : "无"}
 
 参考材料摘要：
 ${referenceContext || "无"}`;
+  appendRuntimeLog("model", "标题模型请求开始", {
+    provider: provider.name,
+    model: model.name,
+    apiFormat: provider.apiFormat,
+    endpoint,
+    prompt,
+    referenceTitles,
+    context
+  });
   const response = await fetch(endpoint, {
     method: "POST",
     headers: buildProviderHeaders(provider),
@@ -1203,9 +1262,13 @@ ${referenceContext || "无"}`;
     )
   });
   if (!response.ok) {
+    appendRuntimeLog("model", "标题模型请求失败", { status: response.status, statusText: response.statusText, context }, "error");
     throw new Error(`项目标题请求失败：${response.status} ${response.statusText}`);
   }
-  return sanitizeProjectTitle(extractTextFromModelPayload(await response.json()));
+  const rawTitle = extractTextFromModelPayload(await response.json());
+  const title = sanitizeProjectTitle(rawTitle);
+  appendRuntimeLog("model", "标题模型原始回复", { rawTitle, title, context });
+  return title;
 };
 
 const requestInlineQuestionAnswer = async (
@@ -1238,6 +1301,15 @@ ${messages.length > 0 ? messages.map((message) => `${message.role === "user" ? "
 
 当前问题：
 ${question}`;
+  appendRuntimeLog("model", "位置提问请求开始", {
+    provider: provider.name,
+    model: model.name,
+    apiFormat: provider.apiFormat,
+    endpoint,
+    question,
+    positionLabel,
+    previousMessageCount: messages.length
+  });
   const response = await fetch(endpoint, {
     method: "POST",
     headers: buildProviderHeaders(provider),
@@ -1254,12 +1326,15 @@ ${question}`;
     )
   });
   if (!response.ok) {
+    appendRuntimeLog("model", "位置提问请求失败", { status: response.status, statusText: response.statusText, question, positionLabel }, "error");
     throw new Error(`位置提问请求失败：${response.status} ${response.statusText}`);
   }
   const text = extractTextFromModelPayload(await response.json());
   if (!text) {
+    appendRuntimeLog("model", "位置提问响应为空", { question, positionLabel }, "warn");
     throw new Error("模型没有返回位置提问回答");
   }
+  appendRuntimeLog("model", "位置提问模型原始回复", { question, positionLabel, answer: text });
   return text;
 };
 
@@ -1714,6 +1789,7 @@ export function App() {
 
   const logDebugMessage = (message: string) => {
     console.info(`[MindLinker] ${message}`);
+    appendRuntimeLog("app", message);
     setDebugMessages((messages) => [message, ...messages].slice(0, 20));
   };
 
@@ -1847,22 +1923,41 @@ export function App() {
       explanationTerms: []
     };
     try {
-      const answerPromise = requestChatCompletion(draft.prompt, documents, chatConfig.provider, chatConfig.model, draft.answerMode, (partialAnswer) => {
-        const visibleAnswer = getVisiblePartialMarkedAnswer(partialAnswer);
-        if (!visibleAnswer.trim()) {
-          return;
-        }
-        setVisibleConversationDrafts((drafts) => ({
-          ...drafts,
-          [conversationId]: {
-            ...streamingDraftBase,
-            answerMarkdown: visibleAnswer
+      const runtimeContext = {
+        projectId,
+        conversationId,
+        projectTitle: projectSnapshot?.title,
+        conversationTitle: conversationSnapshot?.title ?? draft.title
+      };
+      const answerPromise = requestChatCompletion(
+        draft.prompt,
+        documents,
+        chatConfig.provider,
+        chatConfig.model,
+        draft.answerMode,
+        (partialAnswer) => {
+          const visibleAnswer = getVisiblePartialMarkedAnswer(partialAnswer);
+          if (!visibleAnswer.trim()) {
+            return;
           }
-        }));
-        if (shouldUpdateVisibleConversation()) {
-          setGenerationPhase("idle");
-        }
-      });
+          appendRuntimeLog("model", "主模型流式片段", {
+            ...runtimeContext,
+            visibleLength: visibleAnswer.length,
+            rawLength: partialAnswer.length
+          });
+          setVisibleConversationDrafts((drafts) => ({
+            ...drafts,
+            [conversationId]: {
+              ...streamingDraftBase,
+              answerMarkdown: visibleAnswer
+            }
+          }));
+          if (shouldUpdateVisibleConversation()) {
+            setGenerationPhase("idle");
+          }
+        },
+        runtimeContext
+      );
       const titlePromise = requestProjectTitle(
         draft.prompt,
         draft.referenceTitles,
@@ -1882,6 +1977,12 @@ export function App() {
       ]);
       const parsedAnswer = parseMarkedAnswer(answerMarkdown);
       const explanationTerms = parsedAnswer.terms.length > 0 ? parsedAnswer.terms : buildFallbackMarkedTerms(parsedAnswer.cleanMarkdown);
+      appendRuntimeLog("model", "主回复标记解析完成", {
+        ...runtimeContext,
+        markerCount: parsedAnswer.terms.length,
+        fallbackTermCount: parsedAnswer.terms.length > 0 ? 0 : explanationTerms.length,
+        terms: explanationTerms.map((term) => ({ id: term.id, term: term.term, ordinal: term.ordinal }))
+      });
       const completedDraft = completeConversationDraft({
         ...draft,
         answerMarkdown: parsedAnswer.cleanMarkdown,
@@ -1905,7 +2006,8 @@ export function App() {
           chatConfig.provider,
           chatConfig.model,
           targetReferenceState,
-          { allowNestedMarkers: true, reason: "answer" }
+          { allowNestedMarkers: true, reason: "answer" },
+          runtimeContext
         );
         const nestedTermsByExplanation = explanations.map((explanation, explanationIndex) =>
           parseMarkedAnswer(explanation.body).terms.map((term, termIndex) => ({
@@ -1942,7 +2044,8 @@ export function App() {
                 chatConfig.provider,
                 chatConfig.model,
                 targetReferenceState,
-                { allowNestedMarkers: false, reason: "nested" }
+                { allowNestedMarkers: false, reason: "nested" },
+                runtimeContext
               )
             : [];
         const nestedByTerm = new Map(nestedExplanations.map((explanation) => [explanation.term, explanation]));
@@ -2507,6 +2610,11 @@ export function App() {
       return;
     }
     setNotice(`正在测试 ${provider.name}`);
+    appendRuntimeLog("settings", "供应商连接测试开始", {
+      provider: provider.name,
+      baseUrl: provider.baseUrl,
+      apiFormat: provider.apiFormat
+    });
     try {
       const response = await fetch(buildProviderUrl(provider, "/models"), {
         method: "GET",
@@ -2517,9 +2625,11 @@ export function App() {
       if (!response.ok) {
         throw new Error(`${response.status} ${response.statusText}`.trim());
       }
+      appendRuntimeLog("settings", "供应商连接测试通过", { provider: provider.name, status: response.status });
       setNotice(`${provider.name} 连接检查已通过`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      appendRuntimeLog("settings", "供应商连接测试失败", { provider: provider.name, message }, "error");
       setNotice(`${provider.name} 连接失败：${message}`);
     }
   };
@@ -2534,6 +2644,12 @@ export function App() {
       return;
     }
     setNotice(`正在测试 ${model.name}`);
+    appendRuntimeLog("settings", "模型连接测试开始", {
+      provider: provider.name,
+      model: model.name,
+      baseUrl: provider.baseUrl,
+      apiFormat: provider.apiFormat
+    });
     try {
       const isResponses = provider.apiFormat === "openai-responses";
       const response = await fetch(buildProviderUrl(provider, isResponses ? "/responses" : "/chat/completions"), {
@@ -2558,9 +2674,11 @@ export function App() {
       if (!response.ok) {
         throw new Error(`${response.status} ${response.statusText}`.trim());
       }
+      appendRuntimeLog("settings", "模型连接测试通过", { provider: provider.name, model: model.name, status: response.status });
       setNotice(`${model.name} 模型检查已通过`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      appendRuntimeLog("settings", "模型连接测试失败", { provider: provider.name, model: model.name, message }, "error");
       setNotice(`${model.name} 模型检查失败：${message}`);
     }
   };
@@ -2629,7 +2747,12 @@ export function App() {
         chatConfig.provider,
         chatConfig.model,
         activeConversation.referenceState,
-        { allowNestedMarkers: false, reason: "manual" }
+        { allowNestedMarkers: false, reason: "manual" },
+        {
+          projectId: activeProject.id,
+          conversationId: activeConversation.id,
+          selectedText
+        }
       );
       const explanation = explanations[0];
       if (!explanation) {
@@ -3029,7 +3152,13 @@ export function App() {
         chatConfig.provider,
         chatConfig.model,
         activeReferencePlan?.impacts.find((impact) => impact.term === term)?.nextReferenceState ?? activeConversation.referenceState,
-        { allowNestedMarkers: true, reason: "manual" }
+        { allowNestedMarkers: true, reason: "manual" },
+        {
+          projectId: activeProject.id,
+          conversationId: activeConversation.id,
+          term,
+          operation: "rewrite-explanation"
+        }
       );
       const nextExplanation = rewritten[0];
       if (!nextExplanation) {

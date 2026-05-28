@@ -2222,6 +2222,39 @@ describe("MindLinker shell", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/解释链生成完成|已生成第一层解释/);
   });
 
+  it("records model replies and explanation parsing in the runtime log", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await configureMockChatApi(
+      user,
+      "日志测试主回复，[[ml:term-cross-entropy]]交叉熵[[/ml]] 需要解释。",
+      JSON.stringify([
+        {
+          id: "term-cross-entropy",
+          term: "交叉熵",
+          body: "日志测试解释正文。",
+          source: "来源：当前参考"
+        }
+      ])
+    );
+
+    await enterWorkspace(user);
+    await user.click(screen.getByRole("button", { name: "新建对话" }));
+    await user.type(screen.getByLabelText("新对话提示词"), "测试运行日志");
+    await user.click(screen.getByRole("button", { name: "创建对话" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "解释 交叉熵" })).toHaveClass("revealed"));
+
+    const runtimeLogs = JSON.parse(window.localStorage.getItem("mindlinker.runtimeLogs") ?? "[]");
+    expect(runtimeLogs.some((entry: any) => entry.message === "主模型原始回复" && entry.metadata?.answer?.includes("日志测试主回复"))).toBe(true);
+    expect(
+      runtimeLogs.some(
+        (entry: any) => entry.message === "解释链模型原始回复" && String(entry.metadata?.rawText ?? "").includes("日志测试解释正文")
+      )
+    ).toBe(true);
+    expect(runtimeLogs.some((entry: any) => entry.message === "解释链解析完成" && entry.metadata?.parsedCount === 1)).toBe(true);
+  });
+
   it("falls back to concept candidates when the main answer has no explanation markers", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();
