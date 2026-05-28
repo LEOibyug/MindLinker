@@ -24,24 +24,12 @@ import type {
 import { ExplanationPanel } from "../components/panels/ExplanationPanel";
 import { buildDraftKnowledgeGraph, buildProjectKnowledgeGraph } from "../domain/knowledgeGraph";
 import {
-  buildInitialProjectConversation,
   buildProjectNavigationTarget,
-  deleteConversationFromProject,
   deleteProjectFromCollections,
-  getConversationGenerationPhase,
-  removeProjectDocument
 } from "../domain/projectLifecycle";
 import { buildRewritePrompt } from "../services/modelClient";
-import { parseReferenceFile } from "../services/pdfReferences";
 import type { ParsedReferenceDocument } from "../services/pdfReferences";
 import { getActiveProviderId } from "../services/providerSettings";
-import {
-  cloneParsedReferenceForProject,
-  createReferenceCacheEntry,
-  getFileFingerprint,
-  pruneReferenceCache,
-  pruneReferenceDocuments
-} from "../services/referenceCache";
 import { appendRuntimeLog } from "../services/runtimeLog";
 import { SettingsPage } from "../components/panels/SettingsPage";
 import { VectorStoreDialog } from "../components/panels/VectorStoreDialog";
@@ -57,6 +45,7 @@ import { useProviderSettingsActions } from "./useProviderSettingsActions";
 import { useExplanationActions } from "./useExplanationActions";
 import { useInlineConversationActions } from "./useInlineConversationActions";
 import { useHomeProjectActions } from "./useHomeProjectActions";
+import { useWorkspaceActions } from "./useWorkspaceActions";
 
 const emptyKnowledgeGraph: ConversationKnowledgeGraph = {
   nodes: [],
@@ -426,35 +415,72 @@ export function App() {
     logDebugMessage
   });
 
-  const parseReferenceFileWithCache = async (file: File, projectId: string, index: number) => {
-    const fingerprint = getFileFingerprint(file);
-    const cachedDocument = referenceParseCache[fingerprint]?.document;
-    if (cachedDocument) {
-      return cloneParsedReferenceForProject(cachedDocument, projectId, index);
-    }
-    const parsedDocument = await parseReferenceFile(file, projectId, index, ragEnabled);
-    setReferenceParseCache((cache) => ({
-      ...cache,
-      [fingerprint]: createReferenceCacheEntry(parsedDocument, fingerprint)
-    }));
-    return parsedDocument;
-  };
-
-  const pruneParsedReferences = (removedDocumentIds: string[]) => {
-    if (removedDocumentIds.length === 0) {
-      return;
-    }
-    const nextDocuments = pruneReferenceDocuments({
-      activeProjectId: activeProject.id,
-      documents: parsedReferences,
-      projects: localProjects,
-      removedDocumentIds
-    });
-    setParsedProjectReferences(nextDocuments);
-    setReferenceParseCache((cache) => {
-      return pruneReferenceCache(cache, nextDocuments);
-    });
-  };
+  const {
+    addWorkspaceReferences,
+    applyFullRewrite,
+    applyReferencePatch,
+    clearVectorStore,
+    createConversationInActiveProject,
+    deleteConversation,
+    deleteProjectReference,
+    introduceReference,
+    rebuildActiveVectorStore,
+    switchConversation,
+    switchProject
+  } = useWorkspaceActions({
+    activeConversation,
+    activeConversationId: activeConversation.id,
+    activeDocumentIds,
+    activeDraft,
+    activeProject,
+    activeProjectId: activeProject.id,
+    activeProjectTitle,
+    allDocuments,
+    confirmingConversationDeleteId,
+    confirmingReferenceDeleteId,
+    conversationDrafts,
+    conversationExplanations,
+    embeddingEndpoint,
+    includedDocumentIds,
+    inlineConversations,
+    localProjects,
+    localVectorStores,
+    parsedReferences,
+    projectDocuments,
+    ragEnabled,
+    referenceParseCache,
+    runningConversationIds,
+    setActiveConversationId,
+    setActiveProjectId,
+    setAnnotationsRevealed,
+    setAppliedPatch,
+    setAvailableExplanations,
+    setConfirmingConversationDeleteId,
+    setConfirmingProjectDeleteId,
+    setConfirmingReferenceDeleteId,
+    setConversationExplanations,
+    setFullRewriteApplied,
+    setGenerationPhase,
+    setIncludedDocumentIds,
+    setInlineConversations,
+    setLocalProjects,
+    setLocalVectorStores,
+    setNewConversationAnswerMode,
+    setNewConversationOpen,
+    setNewConversationPrompt,
+    setNotice,
+    setParsedProjectReferences,
+    setReferenceParseCache,
+    setReferencePlanId,
+    setRewriteDraft,
+    setRunningConversationIds,
+    setStoredConversationDrafts,
+    setViewMode,
+    setExplanationStack,
+    generateConversation,
+    hasRestorableAnnotations,
+    logDebugMessage
+  });
 
   const deleteProject = (projectId: string) => {
     const projectToDelete = localProjects.find((project) => project.id === projectId);
@@ -546,148 +572,6 @@ export function App() {
     );
   };
 
-  const switchProject = (projectId: string) => {
-    const nextProject = localProjects.find((project) => project.id === projectId);
-    if (!nextProject) {
-      return;
-    }
-    const target = buildProjectNavigationTarget(nextProject);
-    const nextConversation = nextProject.conversations[0];
-    setActiveProjectId(target.projectId);
-    setActiveConversationId(target.conversationId);
-    setAvailableExplanations(conversationExplanations[target.conversationId] ?? []);
-    setExplanationStack([]);
-    setViewMode("reader");
-    setGenerationPhase(target.generationPhase);
-    setAnnotationsRevealed(hasRestorableAnnotations(target.conversationId, nextConversation.status));
-    setRewriteDraft(null);
-    setReferencePlanId(null);
-    setAppliedPatch(false);
-    setConfirmingProjectDeleteId(null);
-    setConfirmingConversationDeleteId(null);
-    setConfirmingReferenceDeleteId(null);
-    setNewConversationOpen(false);
-  };
-
-  const switchConversation = (conversationId: string) => {
-    const nextConversation = activeProject.conversations.find((conversation) => conversation.id === conversationId);
-    if (!nextConversation) {
-      return;
-    }
-    setActiveConversationId(conversationId);
-    setAvailableExplanations(conversationExplanations[conversationId] ?? []);
-    setExplanationStack([]);
-    setViewMode("reader");
-    setGenerationPhase(getConversationGenerationPhase(nextConversation.status));
-    setAnnotationsRevealed(hasRestorableAnnotations(nextConversation.id, nextConversation.status));
-    setRewriteDraft(null);
-    setReferencePlanId(null);
-    setAppliedPatch(false);
-    setConfirmingProjectDeleteId(null);
-    setConfirmingConversationDeleteId(null);
-    setConfirmingReferenceDeleteId(null);
-    setNewConversationOpen(false);
-  };
-
-  const deleteConversation = (conversationId: string) => {
-    const conversation = activeProject.conversations.find((item) => item.id === conversationId);
-    if (!conversation) {
-      return;
-    }
-    if (confirmingConversationDeleteId !== conversationId) {
-      setConfirmingConversationDeleteId(conversationId);
-      setNotice(`再次确认后会删除对话：${conversation.title}`);
-      return;
-    }
-    const deletion = deleteConversationFromProject({
-      project: activeProject,
-      conversationId,
-      drafts: conversationDrafts,
-      explanations: conversationExplanations,
-      inlineConversations,
-      runningConversationIds
-    });
-    setLocalProjects((projects) =>
-      projects.map((project) => (project.id === activeProject.id ? deletion.project : project))
-    );
-    setStoredConversationDrafts(deletion.drafts);
-    setConversationExplanations(deletion.explanations);
-    setInlineConversations(deletion.inlineConversations);
-    setRunningConversationIds(deletion.runningConversationIds);
-    setConfirmingConversationDeleteId(null);
-    const nextConversation = deletion.nextConversation ?? emptyConversation;
-    if (activeConversation.id === conversationId) {
-      setActiveConversationId(nextConversation.id);
-      setAvailableExplanations(nextConversation.id ? deletion.explanations[nextConversation.id] ?? [] : []);
-      setExplanationStack([]);
-      setGenerationPhase(getConversationGenerationPhase(nextConversation.status));
-      setAnnotationsRevealed(hasRestorableAnnotations(nextConversation.id, nextConversation.status));
-    }
-    setNotice("已删除对话");
-  };
-
-  const deleteProjectReference = (documentId: string) => {
-    const document = allDocuments.find((item) => item.id === documentId);
-    if (!document) {
-      return;
-    }
-    if (confirmingReferenceDeleteId !== documentId) {
-      setConfirmingReferenceDeleteId(documentId);
-      setNotice(`再次确认后会删除参考：${document.title}`);
-      return;
-    }
-    const removal = removeProjectDocument({
-      projectId: activeProject.id,
-      documentId,
-      projects: localProjects,
-      includedDocumentIds
-    });
-    setIncludedDocumentIds(removal.includedDocumentIds);
-    setLocalProjects(removal.projects);
-    pruneParsedReferences([documentId]);
-    setConfirmingReferenceDeleteId(null);
-    setReferencePlanId("remove-notes-full-rewrite");
-    setAppliedPatch(false);
-    setNotice("已删除参考");
-  };
-
-  const createConversationInActiveProject = (promptInput = newConversationPrompt, answerMode = newConversationAnswerMode) => {
-    if (!activeProject.id) {
-      return;
-    }
-    const conversationId = `conversation-${Date.now()}`;
-    const { effectivePrompt, conversation } = buildInitialProjectConversation({
-      prompt: promptInput,
-      documents: projectDocuments,
-      conversationId
-    });
-    const draft = buildConversationDraft(effectivePrompt, projectDocuments, ragEnabled, answerMode);
-    setLocalProjects((projects) =>
-      projects.map((project) =>
-        project.id === activeProject.id
-          ? {
-              ...project,
-              conversations: [conversation, ...project.conversations]
-            }
-          : project
-      )
-    );
-    setStoredConversationDrafts((drafts) => ({ ...drafts, [conversationId]: { ...draft, title: conversation.title } }));
-    setActiveConversationId(conversationId);
-    setViewMode("reader");
-    setAvailableExplanations([]);
-    setExplanationStack([]);
-    setAnnotationsRevealed(false);
-    setGenerationPhase("content");
-    setNewConversationPrompt("");
-    setNewConversationOpen(false);
-    setNewConversationAnswerMode("balanced");
-    setConfirmingProjectDeleteId(null);
-    setConfirmingConversationDeleteId(null);
-    setNotice(projectDocuments.length > 0 ? "已新建对话并载入项目参考" : "已新建对话");
-    void generateConversation(conversationId, { ...draft, title: conversation.title }, projectDocuments, activeProject.id);
-  };
-
   const renderNewConversationPanel = () =>
     newConversationOpen ? (
       <NewConversationPanel
@@ -701,7 +585,7 @@ export function App() {
           setNewConversationAnswerMode("balanced");
         }}
         onPromptChange={setNewConversationPrompt}
-        onSubmit={() => createConversationInActiveProject()}
+        onSubmit={() => createConversationInActiveProject(newConversationPrompt, newConversationAnswerMode)}
       />
     ) : null;
 
@@ -711,78 +595,6 @@ export function App() {
     }
     setRewriteDraft(contextMenu.selectedText);
     setContextMenu(null);
-  };
-
-  const introduceReference = () => {
-    document.getElementById("workspace-reference-input")?.click();
-  };
-
-  const addWorkspaceReferences = async (files: File[]) => {
-    if (files.length === 0) {
-      return;
-    }
-    setNotice("正在本地解析参考文件");
-    const documents = await Promise.all(files.map((file, index) => parseReferenceFileWithCache(file, activeProject.id, index)));
-    documents.forEach((document) => {
-      logDebugMessage(
-        `参考解析完成：${document.title}，${document.pageCount} 页，${document.pages.filter((page) => page.needsImage).length} 页含图片`
-      );
-      document.diagnostics.forEach(logDebugMessage);
-    });
-    const documentIds = documents.map((document) => document.id);
-    setParsedProjectReferences((currentDocuments) => [...documents, ...currentDocuments]);
-    setIncludedDocumentIds((documentsByProject) => ({
-      ...documentsByProject,
-      [activeProject.id]: Array.from(new Set([...(documentsByProject[activeProject.id] ?? []), ...documentIds]))
-    }));
-    setLocalProjects((projects) =>
-      projects.map((project) =>
-        project.id === activeProject.id
-          ? { ...project, documents: Array.from(new Set([...project.documents, ...documentIds])) }
-          : project
-      )
-    );
-    setReferencePlanId(activeDraft?.modelStatus === "generated" ? "next-chapter-patch" : null);
-    setAppliedPatch(false);
-    setNotice(`已导入 ${documents.length} 份参考`);
-  };
-
-  const applyReferencePatch = () => {
-    setAppliedPatch(true);
-    setAnnotationsRevealed(true);
-    setNotice("已执行插入式更新，并保留可复用的解释锚点");
-  };
-
-  const applyFullRewrite = () => {
-    setFullRewriteApplied(true);
-    setReferencePlanId(null);
-    setAppliedPatch(false);
-    setAnnotationsRevealed(false);
-    setAvailableExplanations([]);
-    setExplanationStack([]);
-    setNotice("已完成全文重写，并重新绑定解释链");
-  };
-
-  const clearVectorStore = (storeId: string) => {
-    setLocalVectorStores((stores) => stores.filter((store) => store.id !== storeId));
-    setNotice("已清理选中的向量库");
-  };
-
-  const rebuildActiveVectorStore = () => {
-    const nextStore = {
-      id: `vectors-${activeProject.id}-rebuild`,
-      name: `${activeProjectTitle} / 当前参考`,
-      projectId: activeProject.id,
-      documentIds: activeDocumentIds,
-      embeddingEndpoint,
-      embeddingModelId: "text-embedding-3-large",
-      dimensions: 3072,
-      chunkCount: projectDocuments.reduce((total, document) => total + document.pages.length, 0),
-      sizeMb: Math.max(0.4, projectDocuments.reduce((total, document) => total + document.pages.length, 0) * 0.72),
-      updatedAt: "2026-05-27 20:10"
-    };
-    setLocalVectorStores((stores) => [nextStore, ...stores.filter((store) => store.id !== nextStore.id)]);
-    setNotice("已重建当前项目索引");
   };
 
   const renderSettingsPage = () => (

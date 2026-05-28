@@ -12,6 +12,18 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Workspace Action Hook Refactor
+
+- Extracted workspace project/conversation switching, project-scoped reference import/delete, new conversation creation, reference patch/full-rewrite state changes, and vector-store actions from `App.tsx` into `app/useWorkspaceActions.ts`.
+- Kept `App.tsx` responsible for high-level app state ownership, project deletion, reader/settings composition, and cross-feature wiring.
+- Added hook tests for project switching, new project conversation creation, workspace reference import, and two-step reference deletion confirmation.
+- Reduced `App.tsx` from roughly 1,000 lines to roughly 812 lines.
+- Verification:
+  - `npm test -- --run src/app/useWorkspaceActions.test.tsx`
+  - `npm test -- --run src/app/App.test.tsx -t "switches between learning projects|new conversation|新建对话|background|正在生成|删除对话|删除参考|referenceParseCache|parsed reference|introduces a new reference|reference changes|向量库|vector|RAG|project folders|项目文件夹|home-style project starter"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Home Project Workflow Hook Refactor
 
 - Extracted home reference pre-parsing, reference removal, home-start project creation, existing-project opening, and new-project reset from `App.tsx` into `app/useHomeProjectActions.ts`.
