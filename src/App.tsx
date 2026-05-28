@@ -4269,6 +4269,16 @@ export function App() {
                   </label>
                   <small>回答、关键词抽取、解释和重写都会优先使用当前供应商的主模型。</small>
                 </div>
+                <aside className="vision-model-hint" aria-label="视觉模型提示">
+                  <strong>请使用带有视觉能力的模型</strong>
+                  <p>
+                    PDF 页面图片、截图、扫描内容和复杂排版会作为图像上下文参与生成。推荐优先填写
+                    <code>gpt5.5</code>
+                    或
+                    <code>gpt5.4</code>
+                    ，也可以使用供应商提供的其他视觉模型。
+                  </p>
+                </aside>
                 <div className="settings-section-title">
                   <div>
                     <h3>供应商</h3>

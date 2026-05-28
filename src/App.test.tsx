@@ -1347,6 +1347,9 @@ describe("MindLinker shell", () => {
     expect(screen.queryByLabelText("供应商 custom-compatible Key 名称")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Embedding 模型")).not.toBeInTheDocument();
     expect(screen.getByLabelText("RAG Embedding 模型")).toBeInTheDocument();
+    expect(screen.getByText(/请使用带有视觉能力的模型/)).toBeInTheDocument();
+    expect(screen.getByText(/gpt5\.5/)).toBeInTheDocument();
+    expect(screen.getByText(/gpt5\.4/)).toBeInTheDocument();
     expect(screen.queryByText("RAG 索引")).not.toBeInTheDocument();
     expect(screen.queryByText("24 chunks")).not.toBeInTheDocument();
     expect(screen.getAllByText("自定义兼容接口").length).toBeGreaterThanOrEqual(1);

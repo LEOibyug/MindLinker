@@ -1795,6 +1795,37 @@ h3 {
   font-size: 12px;
 }
 
+.vision-model-hint {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #b9cff4;
+  border-radius: 8px;
+  background: #f3f7ff;
+  color: #263348;
+  padding: 12px 14px;
+}
+
+.vision-model-hint strong {
+  color: #184b93;
+  font-size: 14px;
+}
+
+.vision-model-hint p {
+  color: #526078;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.vision-model-hint code {
+  border-radius: 5px;
+  background: #e7efff;
+  color: #174b96;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: .92em;
+  margin: 0 3px;
+  padding: 1px 5px;
+}
+
 .settings-dialog,
 .vector-store-dialog,
 .inline-conversation-dialog {
