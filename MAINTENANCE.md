@@ -12,6 +12,24 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Provider Settings Logic Refactor
+
+- Extracted provider configuration rules from `App.tsx` into `providerSettings.ts`.
+- Kept notification, persistence, and network test orchestration in `App.tsx` while moving pure logic for:
+  - active provider fallback selection;
+  - creating a default custom provider;
+  - adding main-model rows;
+  - updating provider fields and model names;
+  - deleting providers while keeping a valid active provider;
+  - preventing the last provider or last model from disappearing.
+- Added module-level tests for provider creation, model defaults, scoped updates, active-provider fallback, provider deletion, and model deletion.
+- Reduced `App.tsx` from roughly 2,106 lines to roughly 2,053 lines.
+- Verification:
+  - `npm test -- --run src/providerSettings.test.ts`
+  - `npm test -- --run src/SettingsPage.test.tsx src/App.test.tsx -t "provider|供应商|模型|API 格式|RAG|settings"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Workspace View Refactor
 
 - Extracted the workspace three-column composition from `App.tsx` into `WorkspaceView.tsx`.

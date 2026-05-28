@@ -34,6 +34,17 @@ import {
 } from "./modelClient";
 import { parseReferenceFile } from "./pdfReferences";
 import type { ParsedReferenceDocument } from "./pdfReferences";
+import {
+  addProviderConfig,
+  addProviderModelConfig,
+  createProviderConfig,
+  deleteProviderConfig,
+  deleteProviderModelConfig,
+  getActiveProviderId,
+  updateProviderConfig,
+  updateProviderModelConfig
+} from "./providerSettings";
+import type { ProviderField } from "./providerSettings";
 import { appendRuntimeLog } from "./runtimeLog";
 import { SettingsPage } from "./SettingsPage";
 import { normalizePlainTextForAnchor } from "./textAnchors";
@@ -253,9 +264,7 @@ export function App() {
     activeProject.conversations[0] ??
     emptyConversation;
   const activeProjectTitle = projectTitles[activeProject.id] ?? activeProject.title;
-  const activeProviderId = customProviders.some((provider) => provider.id === activeProviderIdState)
-    ? activeProviderIdState
-    : customProviders[0]?.id ?? "";
+  const activeProviderId = getActiveProviderId(customProviders, activeProviderIdState);
   const activeDocumentIds = includedDocumentIds[activeProject.id] ?? activeProject.documents;
   const sampleReferences = useMemo<ParsedReferenceDocument[]>(() => [], []);
   const allDocuments = useMemo(() => [...sampleReferences, ...parsedReferences], [parsedReferences, sampleReferences]);
@@ -1123,101 +1132,39 @@ export function App() {
 
   const addProvider = () => {
     const providerId = `provider-${Date.now()}`;
-    const provider: ProviderConfig = {
-      id: providerId,
-      name: "自定义供应商",
-      baseUrl: "https://api.example.com/v1",
-      apiKeyLabel: "API Key",
-      apiFormat: "openai-compatible",
-      models: [
-        {
-          id: `${providerId}-chat`,
-          providerId,
-          name: "custom-chat-model",
-          capability: "chat",
-          role: "main"
-        }
-      ]
-    };
-    setCustomProviders((providers) => [...providers, provider]);
+    setCustomProviders((providers) => addProviderConfig(providers, createProviderConfig(providerId)));
     setNotice("已添加自定义供应商");
   };
 
   const addProviderModel = (providerId: string) => {
     const modelId = `${providerId}-model-${Date.now()}`;
-    setCustomProviders((providers) =>
-      providers.map((provider) =>
-        provider.id === providerId
-          ? {
-              ...provider,
-              models: [
-                ...provider.models,
-                {
-                  id: modelId,
-                  providerId,
-                  name: "custom-model",
-                  capability: "chat",
-                  role: "main"
-                }
-              ]
-            }
-          : provider
-      )
-    );
+    setCustomProviders((providers) => addProviderModelConfig(providers, providerId, modelId));
     setNotice("已添加模型");
   };
 
-  const updateProvider = (providerId: string, field: "name" | "baseUrl" | "apiKeyLabel" | "apiKey" | "apiFormat", value: string) => {
-    setCustomProviders((providers) =>
-      providers.map((provider) => (provider.id === providerId ? { ...provider, [field]: value } : provider))
-    );
+  const updateProvider = (providerId: string, field: ProviderField, value: string) => {
+    setCustomProviders((providers) => updateProviderConfig(providers, providerId, field, value));
   };
 
   const updateProviderModel = (providerId: string, modelId: string, value: string) => {
-    setCustomProviders((providers) =>
-      providers.map((provider) =>
-        provider.id === providerId
-          ? {
-              ...provider,
-              models: provider.models.map((model) => {
-                if (model.id !== modelId) {
-                  return model;
-                }
-                return { ...model, name: value, role: "main", capability: "chat" };
-              })
-            }
-          : provider
-      )
-    );
+    setCustomProviders((providers) => updateProviderModelConfig(providers, providerId, modelId, value));
   };
 
   const deleteProvider = (providerId: string) => {
-    if (customProviders.length <= 1) {
+    const deletion = deleteProviderConfig(customProviders, providerId, activeProviderId);
+    if (!deletion.deleted) {
       setNotice("至少需要保留一个供应商配置");
       return;
     }
-    if (activeProviderId === providerId) {
-      const nextProvider = customProviders.find((provider) => provider.id !== providerId);
-      if (nextProvider) {
-        setActiveProviderId(nextProvider.id);
-      }
+    if (deletion.activeProviderId !== activeProviderId) {
+      setActiveProviderId(deletion.activeProviderId);
     }
-    setCustomProviders((providers) => providers.filter((provider) => provider.id !== providerId));
+    setCustomProviders(deletion.providers);
     setNotice("已删除供应商配置");
   };
 
   const deleteProviderModel = (providerId: string, modelId: string) => {
-    setCustomProviders((providers) =>
-      providers.map((provider) =>
-        provider.id === providerId
-          ? {
-              ...provider,
-              models:
-                provider.models.length <= 1 ? provider.models : provider.models.filter((model) => model.id !== modelId)
-            }
-          : provider
-      )
-    );
+    setCustomProviders((providers) => deleteProviderModelConfig(providers, providerId, modelId));
     setNotice("已删除模型");
   };
 
