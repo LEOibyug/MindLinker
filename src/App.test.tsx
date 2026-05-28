@@ -2101,7 +2101,7 @@ describe("MindLinker shell", () => {
     expect(styles).toContain("backdrop-filter: none;");
 
     await user.type(screen.getByLabelText("当前位置提问"), "这里和前面的信息熵有什么关系？");
-    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    await user.click(screen.getByRole("button", { name: "发送" }));
 
     expect(await screen.findByText(/这是模型基于当前位置、主回复和参考生成的回答/)).toBeInTheDocument();
     expect(dialog.querySelector(".inline-math .katex")).toBeInTheDocument();
@@ -2119,12 +2119,12 @@ describe("MindLinker shell", () => {
     expect(requestBody).toContain("这里和前面的信息熵有什么关系？");
 
     await user.type(screen.getByLabelText("当前位置提问"), "能继续解释一下吗？");
-    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    await user.click(screen.getByRole("button", { name: "发送" }));
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(String(fetchMock.mock.calls[1]?.[1]?.body ?? "")).toContain("这里和前面的信息熵有什么关系？");
     expect(String(fetchMock.mock.calls[1]?.[1]?.body ?? "")).toContain("H(X)=-\\\\sum_i p_i\\\\log p_i");
 
-    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "保存提问" }));
 
     expect(screen.queryByRole("dialog", { name: "在此处提问" })).not.toBeInTheDocument();
     const marker = screen.getByRole("button", { name: /查看位置提问/ });
@@ -2170,7 +2170,7 @@ describe("MindLinker shell", () => {
     });
     await user.click(screen.getByRole("menuitem", { name: "在此处提问" }));
     await user.type(screen.getByLabelText("当前位置提问"), "切平面是什么？");
-    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    await user.click(screen.getByRole("button", { name: "发送" }));
 
     expect(await screen.findByText("切平面是在凸函数图像下方支撑函数的仿射平面。")).toBeInTheDocument();
     expect(screen.queryByText("模型没有返回位置提问回答")).not.toBeInTheDocument();
@@ -2227,6 +2227,154 @@ describe("MindLinker shell", () => {
     await user.click(marker);
     expect(screen.getByRole("dialog", { name: "在此处提问" })).toBeInTheDocument();
     expect(screen.getByText("这里的概率分布是什么？")).toBeInTheDocument();
+  });
+
+  it("anchors saved inline question markers to a text position instead of every repeated phrase", async () => {
+    const user = userEvent.setup();
+    seedExistingProjects();
+    window.localStorage.setItem(
+      "mindlinker.conversationDrafts",
+      JSON.stringify({
+        "cross-entropy": {
+          title: "凸函数条件",
+          prompt: "解释严格凸",
+          answerMode: "balanced",
+          referenceMode: "direct",
+          referenceTitles: [],
+          referenceContext: "",
+          openAIInputPreview: "",
+          answerMarkdown: "严格凸函数有严格凸条件。严格凸也可用于唯一性证明。",
+          modelStatus: "generated",
+          generated: true,
+          explanationTerms: []
+        }
+      })
+    );
+    window.localStorage.setItem(
+      "mindlinker.inlineConversations",
+      JSON.stringify([
+        {
+          id: "inline-strict-second",
+          projectId: "loss-functions",
+          conversationId: "cross-entropy",
+          anchor: "严格凸",
+          anchorOffset: 8,
+          positionLabel: "位置：第 9 个字符附近",
+          question: "这里为什么强调严格？",
+          answer: "这里指第二次出现的严格凸。",
+          messages: [
+            { role: "user", content: "这里为什么强调严格？" },
+            { role: "assistant", content: "这里指第二次出现的严格凸。" }
+          ],
+          saved: true
+        }
+      ])
+    );
+    render(<App />);
+    await enterWorkspace(user);
+
+    const paragraph = screen.getByText(/严格凸函数/).closest("p")!;
+    const markers = within(paragraph).getAllByRole("button", { name: /查看位置提问/ });
+    expect(markers).toHaveLength(1);
+    expect(paragraph.textContent).toContain("严格凸函数有严格凸条件");
+  });
+
+  it("saves a marker for a right-click position even when no text is selected", async () => {
+    const user = userEvent.setup();
+    seedExistingProjects();
+    window.localStorage.setItem(
+      "mindlinker.conversationDrafts",
+      JSON.stringify({
+        "cross-entropy": {
+          title: "交叉熵为什么适合分类",
+          prompt: "解释交叉熵",
+          answerMode: "balanced",
+          referenceMode: "direct",
+          referenceTitles: [],
+          referenceContext: "",
+          openAIInputPreview: "",
+          answerMarkdown: "交叉熵依赖概率分布来定义平均编码代价。",
+          modelStatus: "generated",
+          generated: true,
+          explanationTerms: []
+        }
+      })
+    );
+    vi.spyOn(window, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "当前位置回答。" } }]
+      })
+    } as Response);
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    await enterWorkspace(user);
+
+    const paragraph = screen.getByText(/交叉熵依赖概率分布/);
+    fireEvent.contextMenu(paragraph, {
+      clientX: 320,
+      clientY: 240
+    });
+    await user.click(screen.getByRole("menuitem", { name: "在此处提问" }));
+    await user.type(screen.getByLabelText("当前位置提问"), "这里是什么意思？");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    expect(await screen.findByText("当前位置回答。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存提问" }));
+
+    expect(within(paragraph.closest("p")!).getByRole("button", { name: /查看位置提问/ })).toBeInTheDocument();
+  });
+
+  it("streams inline question answers and sends with Enter while Ctrl+Enter inserts a newline", async () => {
+    const user = userEvent.setup();
+    const encoder = new TextEncoder();
+    let inlineController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    vi.spyOn(window, "fetch").mockImplementation(async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            inlineController = controller;
+          }
+        }),
+        {
+          headers: { "Content-Type": "text/event-stream" },
+          status: 200
+        }
+      )
+    );
+    renderWithSeededProjects();
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    await enterWorkspace(user);
+
+    fireEvent.contextMenu(screen.getByRole("article", { name: "回答正文" }), {
+      clientX: 320,
+      clientY: 240
+    });
+    await user.click(screen.getByRole("menuitem", { name: "在此处提问" }));
+    const input = screen.getByLabelText("当前位置提问");
+    await user.type(input, "第一行");
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+    expect(input).toHaveValue("第一行\n");
+    await user.type(input, "第二行");
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(inlineController).not.toBeNull());
+
+    await act(async () => {
+      inlineController?.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"流式"}}]}\n\n'));
+    });
+    expect(await screen.findByText("流式")).toBeInTheDocument();
+    await act(async () => {
+      inlineController?.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"回答"}}]}\n\ndata: [DONE]\n\n'));
+      inlineController?.close();
+    });
+    expect(await screen.findByText("流式回答")).toBeInTheDocument();
   });
 
   it("filters legacy hardcoded inline conversations from local storage", async () => {

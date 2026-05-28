@@ -12,6 +12,27 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-28 - Inline Question Position Anchors
+
+- Fixed saved inline question markers so new conversations anchor to a character position in the rendered answer instead of matching every repeated text fragment.
+- Empty-selection right-click questions now save a marker near the clicked answer position instead of disappearing after save.
+- Inline question answers now request streaming model output and update the small dialog while chunks arrive.
+- Moved the inline question text input into a local dialog component so typing no longer re-renders the whole workspace on every keypress.
+- Adjusted the dialog interaction:
+  - Enter sends the current question.
+  - Ctrl+Enter or Cmd+Enter inserts a newline.
+  - The primary action is now "发送"; saving is a compact secondary action.
+- Regression coverage:
+  - repeated phrases only receive one marker at the saved position;
+  - empty-selection right-click questions leave a saved marker;
+  - inline question answers stream into the dialog;
+  - existing selected-text inline markers, formulas, and manual explanations continue to render.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "anchors saved inline question markers|saves a marker for a right-click position|streams inline question answers"`
+  - `npm test -- src/App.test.tsx -t "inline question|位置提问|saved inline question|manual explanation|selected text|formula|math"`
+  - `npm test`
+  - `npm run build`
+
 ### 2026-05-28 - Responses Text Extraction And LaTeX JSON Recovery
 
 - Investigated the latest runtime log for selected-text explanations and inline questions.

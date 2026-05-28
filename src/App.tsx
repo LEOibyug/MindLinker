@@ -99,6 +99,9 @@ type ContextMenuState = {
   x: number;
   y: number;
   selectedText: string;
+  anchorOffset?: number;
+  anchorLength?: number;
+  anchorText?: string;
   sourceExplanationTerm?: string;
   sourceExplanationBody?: string;
 } | null;
@@ -106,6 +109,9 @@ type ContextMenuState = {
 type InlineConversationDraft = {
   id?: string;
   anchor: string;
+  anchorOffset?: number;
+  anchorLength?: number;
+  anchorText?: string;
   positionLabel: string;
   question: string;
   messages: InlineConversationMessage[];
@@ -122,6 +128,9 @@ type InlineConversation = {
   projectId?: string;
   conversationId?: string;
   anchor: string;
+  anchorOffset?: number;
+  anchorLength?: number;
+  anchorText?: string;
   positionLabel: string;
   question?: string;
   answer?: string;
@@ -129,8 +138,17 @@ type InlineConversation = {
   saved: boolean;
 };
 
+type InlineConversationDialogProps = {
+  draft: NonNullable<InlineConversationDraft>;
+  pending: boolean;
+  onClose: () => void;
+  onSend: (question: string) => void;
+  onSave: () => void;
+};
+
 type InlineConversationMarkerBinding = {
   anchorText: string;
+  offset?: number;
   conversation: InlineConversation;
   index: number;
 };
@@ -264,6 +282,9 @@ const readStoredInlineConversations = () =>
       ...conversation,
       projectId: typeof conversation.projectId === "string" ? conversation.projectId : undefined,
       conversationId: typeof conversation.conversationId === "string" ? conversation.conversationId : undefined,
+      anchorOffset: typeof conversation.anchorOffset === "number" ? conversation.anchorOffset : undefined,
+      anchorLength: typeof conversation.anchorLength === "number" ? conversation.anchorLength : undefined,
+      anchorText: typeof conversation.anchorText === "string" ? conversation.anchorText : undefined,
       positionLabel: conversation.positionLabel ?? conversation.anchor,
       messages:
         Array.isArray(conversation.messages) && conversation.messages.length > 0
@@ -323,6 +344,66 @@ const stripMalformedExplainableMarkers = (text: string) =>
     .replace(/\[\[ml:([^\]\n]+)\]\](?=\[\[ml:|\s|$|[，。；：、,.!?])/g, (_match, rawId: string) => rawId.trim())
     .replace(/\[\[ml:[^\]\n]+\]\]/g, "")
     .replace(/\[\[([^\]\n]{1,100})\]\]/g, (_match, rawId: string) => rawId.trim());
+
+const normalizePlainTextForAnchor = (text: string) =>
+  stripExplainableMarkers(text)
+    .replace(/```(?:math|latex|tex)?/gi, "")
+    .replace(/\$\$/g, "")
+    .replace(/\\\[/g, "")
+    .replace(/\\\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const findNthOccurrenceOffset = (text: string, needle: string, occurrenceIndex: number) => {
+  if (!needle) {
+    return 0;
+  }
+  let offset = -1;
+  let fromIndex = 0;
+  for (let index = 0; index <= occurrenceIndex; index += 1) {
+    offset = text.indexOf(needle, fromIndex);
+    if (offset === -1) {
+      return text.indexOf(needle);
+    }
+    fromIndex = offset + needle.length;
+  }
+  return offset;
+};
+
+const getRangeOffsetWithinElement = (range: Range, container: HTMLElement) => {
+  const prefixRange = range.cloneRange();
+  prefixRange.selectNodeContents(container);
+  prefixRange.setEnd(range.startContainer, range.startOffset);
+  return normalizePlainTextForAnchor(prefixRange.toString()).length;
+};
+
+const getElementAnchorOffset = (element: HTMLElement, root: HTMLElement, fallbackText: string) => {
+  const blockText = normalizePlainTextForAnchor(fallbackText || element.textContent || "");
+  if (!blockText) {
+    return 0;
+  }
+  const rootText = normalizePlainTextForAnchor(root.textContent || "");
+  return Math.max(0, rootText.indexOf(blockText));
+};
+
+const getCaretRangeFromPoint = (x: number, y: number) => {
+  const doc = document as Document & {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  };
+  const range = doc.caretRangeFromPoint?.(x, y);
+  if (range) {
+    return range;
+  }
+  const position = doc.caretPositionFromPoint?.(x, y);
+  if (!position) {
+    return null;
+  }
+  const nextRange = document.createRange();
+  nextRange.setStart(position.offsetNode, position.offset);
+  nextRange.collapse(true);
+  return nextRange;
+};
 
 const parseBoldSegments = (text: string) => {
   const segments: Array<{ text: string; bold: boolean }> = [];
@@ -1596,7 +1677,8 @@ const requestInlineQuestionAnswer = async (
   positionLabel: string,
   messages: InlineConversationMessage[],
   provider: ProviderConfig,
-  model: ModelConfig
+  model: ModelConfig,
+  onDelta?: (text: string) => void
 ) => {
   const baseUrl = provider.baseUrl.replace(/\/+$/, "");
   const endpoint =
@@ -1655,10 +1737,12 @@ ${question}
       provider.apiFormat === "openai-responses"
         ? {
             model: model.name,
+            stream: true,
             input: prompt
           }
         : {
             model: model.name,
+            stream: true,
             messages: [{ role: "user", content: prompt }]
           }
     )
@@ -1666,6 +1750,14 @@ ${question}
   if (!response.ok) {
     appendRuntimeLog("model", "位置提问请求失败", { status: response.status, statusText: response.statusText, question, positionLabel }, "error");
     throw new Error(`位置提问请求失败：${response.status} ${response.statusText}`);
+  }
+  const contentType = response.headers?.get("Content-Type") ?? response.headers?.get("content-type") ?? "";
+  if (contentType.includes("text/event-stream")) {
+    const streamedText = await readSseTextStream(response, onDelta);
+    if (streamedText) {
+      appendRuntimeLog("model", "位置提问模型原始回复", { question, positionLabel, answer: streamedText, transport: "sse" });
+      return streamedText;
+    }
   }
   const text = extractTextFromModelPayload(await response.json());
   if (!text) {
@@ -1957,13 +2049,48 @@ const renderInlineAnswerWithTerms = (
   inlineConversationMarkers: InlineConversationMarkerBinding[] = [],
   openInlineConversation: (conversation: InlineConversation) => void = () => {}
 ) => {
+  const positionalMarkers = inlineConversationMarkers.filter((marker) => typeof marker.offset === "number");
   const sortedInlineMarkers = inlineConversationMarkers
-    .filter((marker) => marker.anchorText && text.includes(marker.anchorText))
+    .filter((marker) => typeof marker.offset !== "number" && marker.anchorText && text.includes(marker.anchorText))
     .sort((a, b) => b.anchorText.length - a.anchorText.length);
   const markerMatcher =
     sortedInlineMarkers.length > 0
       ? new RegExp(`(${sortedInlineMarkers.map((marker) => escapeRegExp(marker.anchorText)).join("|")})`, "g")
       : null;
+  const renderInlineMarkdownWithPositionMarkers = (value: string, keyPrefix: string) => {
+    if (positionalMarkers.length === 0) {
+      return renderInlineMarkdown(value);
+    }
+    const markersByOffset = new Map<number, InlineConversationMarkerBinding[]>();
+    positionalMarkers.forEach((marker) => {
+      const offset = Math.max(0, Math.min(value.length, marker.offset ?? 0));
+      markersByOffset.set(offset, [...(markersByOffset.get(offset) ?? []), marker]);
+    });
+    const offsets = [...markersByOffset.keys()].sort((a, b) => a - b);
+    const nodes: ReactNode[] = [];
+    let cursor = 0;
+    offsets.forEach((offset, offsetIndex) => {
+      if (offset > cursor) {
+        nodes.push(<Fragment key={`${keyPrefix}-pos-text-${offsetIndex}`}>{renderInlineMarkdown(value.slice(cursor, offset))}</Fragment>);
+      }
+      markersByOffset.get(offset)?.forEach((marker, markerIndex) => {
+        nodes.push(
+          renderInlineConversationMarker(
+            marker.conversation,
+            marker.index,
+            openInlineConversation,
+            true,
+            `${keyPrefix}-pos-${offsetIndex}-${markerIndex}-${marker.conversation.id}`
+          )
+        );
+      });
+      cursor = offset;
+    });
+    if (cursor < value.length) {
+      nodes.push(<Fragment key={`${keyPrefix}-pos-tail`}>{renderInlineMarkdown(value.slice(cursor))}</Fragment>);
+    }
+    return nodes;
+  };
   const renderMarker = (part: string, keyPrefix: string) => {
     const marker = sortedInlineMarkers.find((item) => item.anchorText === part);
     return marker
@@ -1972,14 +2099,18 @@ const renderInlineAnswerWithTerms = (
   };
   const renderInlineMarkdownWithMarkers = (value: string, keyPrefix: string) => {
     if (!markerMatcher) {
-      return renderInlineMarkdown(value);
+      return renderInlineMarkdownWithPositionMarkers(value, keyPrefix);
     }
-    return value.split(markerMatcher).map((part, index) => (
-      <Fragment key={`${keyPrefix}-inline-marker-${index}-${part}`}>
-        {renderInlineMarkdown(part)}
-        {renderMarker(part, `${keyPrefix}-${index}`)}
-      </Fragment>
-    ));
+    return (
+      <>
+        {value.split(markerMatcher).map((part, index) => (
+          <Fragment key={`${keyPrefix}-inline-marker-${index}-${part}`}>
+            {renderInlineMarkdownWithPositionMarkers(part, `${keyPrefix}-${index}`)}
+            {renderMarker(part, `${keyPrefix}-${index}`)}
+          </Fragment>
+        ))}
+      </>
+    );
   };
   const renderSegments = (value: string, keyPrefix: string, renderSegment: (segment: string, key: string) => ReactNode) =>
     parseBoldSegments(value).map((segment, segmentIndex) => {
@@ -2030,6 +2161,18 @@ const renderAnswerText = (
   const elements: ReactNode[] = [];
   let listItems: { id: number; content: ReactNode }[] = [];
   let listItemIndex = 0;
+  let plainOffset = 0;
+  const getMarkersForText = (value: string) => {
+    const lineText = normalizePlainTextForAnchor(value);
+    const start = plainOffset;
+    const end = start + lineText.length;
+    plainOffset = end + (lineText ? 1 : 0);
+    return inlineConversationMarkers
+      .filter((marker) => typeof marker.offset === "number" && (marker.offset ?? 0) >= start && (marker.offset ?? 0) <= end)
+      .map((marker) => ({ ...marker, offset: Math.max(0, (marker.offset ?? start) - start) }));
+  };
+  const getLegacyMarkersForText = (value: string) =>
+    inlineConversationMarkers.filter((marker) => typeof marker.offset !== "number" && marker.anchorText && value.includes(marker.anchorText));
   const flushList = () => {
     if (listItems.length === 0) {
       return;
@@ -2048,8 +2191,12 @@ const renderAnswerText = (
   blocks.forEach((block) => {
     if (block.kind === "formula") {
       flushList();
+      const blockMarkers = getMarkersForText(block.text);
       elements.push(
         <div className="formula-block" data-selectable-text={block.text} key={`formula-${elements.length}`}>
+          {blockMarkers.map((marker, index) =>
+            renderInlineConversationMarker(marker.conversation, marker.index, openInlineConversation, true, `formula-marker-${elements.length}-${index}`)
+          )}
           <MathExpression expression={block.text} displayMode />
         </div>
       );
@@ -2057,6 +2204,7 @@ const renderAnswerText = (
     }
     if (block.kind === "table") {
       flushList();
+      plainOffset += normalizePlainTextForAnchor(block.rows.flat().join(" ")).length + 1;
       const [header = [], ...bodyRows] = block.rows;
       elements.push(
         <div className="answer-table-wrap" key={`table-${elements.length}`}>
@@ -2107,8 +2255,10 @@ const renderAnswerText = (
         const line = rawLine.trim();
         if (!line || line === "---") {
           flushList();
+          plainOffset += 1;
           return;
         }
+        const lineMarkers = [...getMarkersForText(line), ...getLegacyMarkersForText(line)];
         if (isMarkdownListLine(line)) {
           listItems.push({
             id: listItemIndex,
@@ -2117,7 +2267,7 @@ const renderAnswerText = (
               textBoundTerms,
               annotationsRevealed,
               openExplanation,
-              inlineConversationMarkers,
+              lineMarkers,
               openInlineConversation
             )
           });
@@ -2135,7 +2285,7 @@ const renderAnswerText = (
                 textBoundTerms,
                 annotationsRevealed,
                 openExplanation,
-                inlineConversationMarkers,
+                lineMarkers,
                 openInlineConversation
               )}
             </>
@@ -2165,7 +2315,7 @@ const renderAnswerText = (
               textBoundTerms,
               annotationsRevealed,
               openExplanation,
-              inlineConversationMarkers,
+              lineMarkers,
               openInlineConversation
             )}
           </p>
@@ -2177,6 +2327,9 @@ const renderAnswerText = (
 };
 
 const getInlineConversationAnchorText = (conversation: InlineConversation) => {
+  if (typeof conversation.anchorOffset === "number") {
+    return conversation.anchorText ?? conversation.anchor;
+  }
   const selectionPrefix = "选区：";
   if (!conversation.positionLabel.startsWith(selectionPrefix)) {
     return "";
@@ -2203,6 +2356,102 @@ const renderInlineConversationMarker = (
   </button>
 );
 
+const InlineConversationDialog = ({ draft, pending, onClose, onSend, onSave }: InlineConversationDialogProps) => {
+  const [question, setQuestion] = useState(draft.question);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    setQuestion(draft.question);
+  }, [draft.id, draft.question]);
+
+  const sendCurrentQuestion = () => {
+    const trimmed = question.trim();
+    if (!trimmed || pending) {
+      return;
+    }
+    onSend(trimmed);
+    setQuestion("");
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      const target = event.currentTarget;
+      const start = target.selectionStart ?? question.length;
+      const end = target.selectionEnd ?? start;
+      const next = `${question.slice(0, start)}\n${question.slice(end)}`;
+      setQuestion(next);
+      window.requestAnimationFrame(() => {
+        if (inputRef.current) {
+          inputRef.current.selectionStart = start + 1;
+          inputRef.current.selectionEnd = start + 1;
+        }
+      });
+      return;
+    }
+    event.preventDefault();
+    sendCurrentQuestion();
+  };
+
+  return (
+    <div className="modal-backdrop inline-dialog-backdrop" role="presentation">
+      <section className="inline-conversation-dialog" role="dialog" aria-modal="true" aria-label="在此处提问">
+        <header>
+          <div>
+            <h2>在此处提问</h2>
+            <p>{draft.anchor}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="关闭位置提问" onClick={onClose}>
+            <X aria-hidden="true" size={16} />
+          </button>
+        </header>
+        <div className="inline-thread" aria-label="位置提问问答">
+          {draft.messages.length > 0 ? (
+            draft.messages.map((message, index) => (
+              <article className={`inline-thread-message ${message.role}`} key={`${message.role}-${index}-${message.content.slice(0, 12)}`}>
+                <strong>{message.role === "user" ? "提问" : "回答"}</strong>
+                <div className="inline-thread-content">{renderAnswerText(message.content)}</div>
+              </article>
+            ))
+          ) : (
+            <p className="empty-sidebar-note">问题会结合参考、主回复和当前位置发送给模型。</p>
+          )}
+          {pending ? (
+            <div className="inline-thread-loading" role="status">
+              <span className="loader-ring small-ring" aria-hidden="true" />
+              正在回答
+            </div>
+          ) : null}
+        </div>
+        <label>
+          当前位置提问
+          <textarea
+            aria-label="当前位置提问"
+            ref={inputRef}
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </label>
+        <div className="dialog-actions">
+          <button className="ghost-button" type="button" onClick={onClose}>
+            取消
+          </button>
+          <button className="primary-button inline-send-button" type="button" disabled={pending || !question.trim()} onClick={sendCurrentQuestion}>
+            发送
+          </button>
+          <button className="ghost-button compact-action-button" type="button" onClick={onSave}>
+            保存提问
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+};
+
 const renderAnswerWithInlineConversations = (
   text: string,
   terms: Explanation[],
@@ -2212,8 +2461,19 @@ const renderAnswerWithInlineConversations = (
   openInlineConversation: (conversation: InlineConversation) => void
 ) => {
   const anchoredItems = inlineItems
-    .map((conversation, index) => ({ conversation, index, anchorText: getInlineConversationAnchorText(conversation) }))
-    .filter((item) => item.anchorText && text.includes(item.anchorText));
+    .map((conversation, index) => {
+      if (typeof conversation.anchorOffset === "number") {
+        return {
+          conversation,
+          index,
+          anchorText: conversation.anchorText ?? conversation.anchor,
+          offset: conversation.anchorOffset
+        };
+      }
+      const anchorText = getInlineConversationAnchorText(conversation);
+      return { conversation, index, anchorText };
+    })
+    .filter((item) => typeof item.offset === "number" || (item.anchorText && text.includes(item.anchorText)));
   return renderAnswerText(text, terms, annotationsRevealed, openExplanation, anchoredItems, openInlineConversation);
 };
 
@@ -3374,6 +3634,7 @@ export function App() {
 
   const openReaderMenu = (event: React.MouseEvent<HTMLElement>) => {
     event.preventDefault();
+    const rootElement = event.currentTarget;
     const sourceExplanationElement =
       event.target instanceof HTMLElement
         ? event.target.closest<HTMLElement>("[data-explanation-term]")
@@ -3382,13 +3643,37 @@ export function App() {
     const sourceExplanationBody = sourceExplanationTerm
       ? availableExplanations.find((explanation) => explanation.term === sourceExplanationTerm)?.body
       : undefined;
-    const selectedText =
-      window.getSelection()?.toString().trim() ||
-      (event.target instanceof HTMLElement
-        ? event.target.closest<HTMLElement>("[data-selectable-text]")?.dataset.selectableText?.trim()
-        : "") ||
-      "";
-    setContextMenu({ x: event.clientX, y: event.clientY, selectedText, sourceExplanationTerm, sourceExplanationBody });
+    const selection = window.getSelection();
+    const selectedTextFromRange = selection?.toString().trim() ?? "";
+    const selectionRange =
+      selectedTextFromRange && selection?.rangeCount && rootElement.contains(selection.anchorNode)
+        ? selection.getRangeAt(0)
+        : null;
+    const selectableElement = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLElement>("[data-selectable-text]")
+      : null;
+    const selectedText = selectedTextFromRange || selectableElement?.dataset.selectableText?.trim() || "";
+    const clickedElement = event.target instanceof HTMLElement ? event.target : rootElement;
+    const clickedRange = selectedText ? null : getCaretRangeFromPoint(event.clientX, event.clientY);
+    const fullAnswerText = normalizePlainTextForAnchor(rootElement.textContent || activeDraft?.answerMarkdown || "");
+    const anchorOffset = selectionRange
+      ? getRangeOffsetWithinElement(selectionRange, rootElement)
+      : selectableElement
+        ? getElementAnchorOffset(selectableElement, rootElement, selectedText)
+        : clickedRange && rootElement.contains(clickedRange.startContainer)
+          ? getRangeOffsetWithinElement(clickedRange, rootElement)
+          : getElementAnchorOffset(clickedElement, rootElement, clickedElement.textContent || "");
+    const anchorText = selectedText || normalizePlainTextForAnchor(clickedElement.textContent || "").slice(0, 18) || "当前位置";
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      selectedText,
+      anchorOffset: Math.min(Math.max(0, anchorOffset), fullAnswerText.length),
+      anchorLength: selectedText ? normalizePlainTextForAnchor(selectedText).length : 0,
+      anchorText,
+      sourceExplanationTerm,
+      sourceExplanationBody
+    });
   };
 
   const createManualExplanation = async () => {
@@ -3672,9 +3957,14 @@ export function App() {
   };
 
   const insertInlineConversation = () => {
-    const positionLabel = contextMenu?.selectedText ? `选区：${contextMenu.selectedText.slice(0, 48)}` : `位置：x${Math.round(contextMenu?.x ?? 0)} y${Math.round(contextMenu?.y ?? 0)}`;
+    const positionLabel = contextMenu?.selectedText
+      ? `选区：${contextMenu.selectedText.slice(0, 48)}`
+      : `位置：第 ${Math.max(1, Math.round((contextMenu?.anchorOffset ?? 0) + 1))} 个字符附近`;
     setInlineConversationDraft({
-      anchor: positionLabel,
+      anchor: contextMenu?.selectedText ? contextMenu.selectedText.slice(0, 48) : "当前位置",
+      anchorOffset: contextMenu?.anchorOffset,
+      anchorLength: contextMenu?.anchorLength,
+      anchorText: contextMenu?.anchorText,
       positionLabel,
       question: "",
       messages: []
@@ -3686,6 +3976,9 @@ export function App() {
     setInlineConversationDraft({
       id: conversation.id,
       anchor: conversation.anchor,
+      anchorOffset: conversation.anchorOffset,
+      anchorLength: conversation.anchorLength,
+      anchorText: conversation.anchorText,
       positionLabel: conversation.positionLabel,
       question: "",
       messages: conversation.messages,
@@ -3693,9 +3986,14 @@ export function App() {
     });
   };
 
-  const sendInlineQuestion = async () => {
-    if (!inlineConversationDraft?.question.trim()) {
+  const sendInlineQuestion = async (rawQuestion?: string) => {
+    const draftSnapshot = inlineConversationDraft;
+    const question = rawQuestion?.trim() ?? draftSnapshot?.question.trim() ?? "";
+    if (!question) {
       setNotice("请输入要提问的内容");
+      return;
+    }
+    if (!draftSnapshot) {
       return;
     }
     const chatConfig = findChatModelConfig(customProviders, activeProviderId);
@@ -3703,20 +4001,29 @@ export function App() {
       setNotice("请在设置中配置可用的主模型 API");
       return;
     }
-    const question = inlineConversationDraft.question.trim();
-    const previousMessages = inlineConversationDraft.messages;
+    const previousMessages = draftSnapshot.messages;
     const nextMessages: InlineConversationMessage[] = [...previousMessages, { role: "user", content: question }];
-    setInlineConversationDraft((draft) => (draft ? { ...draft, question: "", messages: nextMessages } : draft));
+    setInlineConversationDraft((draft) => (draft ? { ...draft, question: "", messages: [...nextMessages, { role: "assistant", content: "" }] } : draft));
     setInlineQuestionPending(true);
     try {
       const answer = await requestInlineQuestionAnswer(
         question,
         activeDraft,
         projectDocuments,
-        inlineConversationDraft.positionLabel,
+        draftSnapshot.positionLabel,
         previousMessages,
         chatConfig.provider,
-        chatConfig.model
+        chatConfig.model,
+        (partialAnswer) => {
+          setInlineConversationDraft((draft) =>
+            draft
+              ? {
+                  ...draft,
+                  messages: [...nextMessages, { role: "assistant", content: partialAnswer }]
+                }
+              : draft
+          );
+        }
       );
       setInlineConversationDraft((draft) =>
         draft ? { ...draft, messages: [...nextMessages, { role: "assistant", content: answer }] } : draft
@@ -3742,6 +4049,9 @@ export function App() {
       projectId: activeProject.id,
       conversationId: activeConversation.id,
       anchor: inlineConversationDraft.anchor,
+      anchorOffset: inlineConversationDraft.anchorOffset,
+      anchorLength: inlineConversationDraft.anchorLength,
+      anchorText: inlineConversationDraft.anchorText,
       positionLabel: inlineConversationDraft.positionLabel,
       question: inlineConversationDraft.messages.find((message) => message.role === "user")?.content ?? "",
       answer: inlineConversationDraft.messages.find((message) => message.role === "assistant")?.content ?? "",
@@ -4575,7 +4885,11 @@ export function App() {
             {activeInlineConversations.length > 0 ? (
               <section className="inline-conversation-list" aria-label="已保存的位置提问">
                 {activeInlineConversations
-                  .filter((conversation) => !getInlineConversationAnchorText(conversation) || !activeDraft?.answerMarkdown.includes(getInlineConversationAnchorText(conversation)))
+                  .filter(
+                    (conversation) =>
+                      (typeof conversation.anchorOffset !== "number" || !(activeDraft?.answerMarkdown ?? "").trim()) &&
+                      (!getInlineConversationAnchorText(conversation) || !activeDraft?.answerMarkdown.includes(getInlineConversationAnchorText(conversation)))
+                  )
                   .map((conversation, index) => renderInlineConversationMarker(conversation, index, openInlineConversation))}
               </section>
             ) : null}
@@ -4725,58 +5039,13 @@ export function App() {
       {settingsOpen ? renderSettingsPage() : null}
 
       {inlineConversationDraft ? (
-        <div className="modal-backdrop inline-dialog-backdrop" role="presentation">
-          <section className="inline-conversation-dialog" role="dialog" aria-modal="true" aria-label="在此处提问">
-            <header>
-              <div>
-                <h2>在此处提问</h2>
-                <p>{inlineConversationDraft.anchor}</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="关闭位置提问" onClick={() => setInlineConversationDraft(null)}>
-                <X aria-hidden="true" size={16} />
-              </button>
-            </header>
-            <div className="inline-thread" aria-label="位置提问问答">
-              {inlineConversationDraft.messages.length > 0 ? (
-                inlineConversationDraft.messages.map((message, index) => (
-                  <article className={`inline-thread-message ${message.role}`} key={`${message.role}-${index}-${message.content.slice(0, 12)}`}>
-                    <strong>{message.role === "user" ? "提问" : "回答"}</strong>
-                    <div className="inline-thread-content">{renderAnswerText(message.content)}</div>
-                  </article>
-                ))
-              ) : (
-                <p className="empty-sidebar-note">问题会结合参考、主回复和当前位置发送给模型。</p>
-              )}
-              {inlineQuestionPending ? (
-                <div className="inline-thread-loading" role="status">
-                  <span className="loader-ring small-ring" aria-hidden="true" />
-                  正在回答
-                </div>
-              ) : null}
-            </div>
-            <label>
-              当前位置提问
-              <textarea
-                aria-label="当前位置提问"
-                value={inlineConversationDraft.question}
-                onChange={(event) =>
-                  setInlineConversationDraft((draft) => (draft ? { ...draft, question: event.target.value } : draft))
-                }
-              />
-            </label>
-            <div className="dialog-actions">
-              <button className="ghost-button" type="button" onClick={() => setInlineConversationDraft(null)}>
-                取消
-              </button>
-              <button className="ghost-button" type="button" disabled={inlineQuestionPending} onClick={() => void sendInlineQuestion()}>
-                发送问题
-              </button>
-              <button className="primary-button" type="button" onClick={saveInlineConversationDraft}>
-                保存
-              </button>
-            </div>
-          </section>
-        </div>
+        <InlineConversationDialog
+          draft={inlineConversationDraft}
+          pending={inlineQuestionPending}
+          onClose={() => setInlineConversationDraft(null)}
+          onSend={(question) => void sendInlineQuestion(question)}
+          onSave={saveInlineConversationDraft}
+        />
       ) : null}
 
       {vectorStoreOpen ? (

@@ -1765,15 +1765,15 @@ h3 {
 .vector-store-dialog,
 .inline-conversation-dialog {
   display: grid;
-  gap: 18px;
-  width: 520px;
+  gap: 14px;
+  width: 560px;
   max-height: calc(100vh - 110px);
   overflow: auto;
   border: 1px solid #cbd6e6;
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 24px 60px rgba(20, 30, 50, .24);
-  padding: 18px;
+  padding: 16px;
 }
 
 .vector-store-dialog {
@@ -1805,20 +1805,22 @@ h3 {
 }
 
 .inline-conversation-dialog textarea {
-  min-height: 96px;
+  min-height: 58px;
+  max-height: 150px;
   resize: vertical;
   border: 1px solid #d5deeb;
   border-radius: 8px;
   color: #263348;
   font: inherit;
-  line-height: 1.5;
-  padding: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 9px 10px;
 }
 
 .inline-thread {
   display: grid;
   gap: 10px;
-  max-height: 280px;
+  max-height: 320px;
   overflow: auto;
   border: 1px solid #e1e8f2;
   border-radius: 8px;
@@ -1880,9 +1882,26 @@ h3 {
 }
 
 .dialog-actions {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
   gap: 10px;
+}
+
+.dialog-actions button {
+  min-height: 34px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dialog-actions .inline-send-button {
+  justify-content: center;
+  min-width: 0;
+}
+
+.dialog-actions .compact-action-button {
+  padding: 0 12px;
 }
 
 .settings-field {
