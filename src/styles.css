@@ -1533,6 +1533,30 @@ h3 {
   padding: 9px 10px;
 }
 
+.graph-error-panel {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 360px;
+  border: 1px solid #d7e2f0;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #33415c;
+  margin: 24px 32px;
+  padding: 24px;
+}
+
+.graph-error-panel h2 {
+  color: #17233c;
+  font-size: 20px;
+}
+
+.graph-error-panel p {
+  max-width: 560px;
+  color: #64748b;
+  line-height: 1.7;
+}
+
 .graph-node-aliases {
   display: flex;
   flex-wrap: wrap;

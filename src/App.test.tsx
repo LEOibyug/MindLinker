@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { GraphErrorBoundary } from "./GraphErrorBoundary";
 import * as pdfReferences from "./pdfReferences";
 
 const seededProjects = [
@@ -513,6 +514,59 @@ describe("MindLinker shell", () => {
     await waitFor(() => expect(screen.getByText(/最终正文/)).toBeInTheDocument());
     expect(screen.queryByText(/\[\[ml:/)).not.toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("button", { name: "对话 解释流式回答 正在生成" })).not.toBeInTheDocument());
+  });
+
+  it("keeps streaming visible when providers close markers with an id suffix", async () => {
+    const user = userEvent.setup();
+    const encoder = new TextEncoder();
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    vi.spyOn(window, "fetch").mockImplementation(async (_input, init) => {
+      const body = String(init?.body ?? "");
+      if (body.includes("待解释词表") || body.includes("项目标题生成任务")) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: body.includes("项目标题生成任务") ? "凹凸性" : "[]" } }]
+          })
+        } as Response;
+      }
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            streamController = controller;
+          }
+        }),
+        { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+      );
+    });
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开设置" }));
+    await user.clear(screen.getByLabelText("供应商 custom-compatible Base URL"));
+    await user.type(screen.getByLabelText("供应商 custom-compatible Base URL"), "https://api.local.test/v1");
+    await user.type(screen.getByLabelText("自定义兼容接口 API Key"), "test-token");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+
+    await user.type(screen.getByLabelText("学习问题"), "解释带 id 的闭合标记");
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+    await waitFor(() => expect(streamController).not.toBeNull());
+
+    await act(async () => {
+      streamController?.enqueue(
+        encoder.encode(
+          'data: {"choices":[{"delta":{"content":"本讲义[[ml:stable-english-id]]凸函数[[/ml:stable-english-id]]继续解释 Jensen 不等式。"}}]}\n\n'
+        )
+      );
+    });
+
+    const reader = screen.getByRole("article", { name: "回答正文" });
+    expect(within(reader).getByText(/本讲义凸函数继续解释 Jensen 不等式/)).toBeInTheDocument();
+    expect(within(reader).queryByText(/\[\[\/?ml/)).not.toBeInTheDocument();
+
+    await act(async () => {
+      streamController?.enqueue(encoder.encode("data: [DONE]\n\n"));
+      streamController?.close();
+    });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "对话 解释带 id 的闭合标记 正在生成" })).not.toBeInTheDocument());
   });
 
   it("does not blank the reader if draft persistence fails during streaming", async () => {
@@ -2231,6 +2285,24 @@ describe("MindLinker shell", () => {
     expect(details.querySelector(".inline-math .mfrac")).toBeInTheDocument();
     expect(details).not.toHaveTextContent("[[jensen-inequality]]");
     expect(details).not.toHaveTextContent("[[kl-divergence]]");
+  });
+
+  it("shows a graph fallback instead of blanking the app when graph rendering throws", () => {
+    const onError = vi.fn();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const BrokenGraph = () => {
+      throw new Error("Knowledge graph crash");
+    };
+
+    render(
+      <GraphErrorBoundary onError={onError}>
+        <BrokenGraph />
+      </GraphErrorBoundary>
+    );
+
+    expect(screen.getByRole("alert", { name: "知识图谱渲染失败" })).toBeInTheDocument();
+    expect(screen.getByText("知识图谱暂时无法渲染")).toBeInTheDocument();
+    expect(onError).toHaveBeenCalled();
   });
 
   it("allows zooming, panning, and selecting nodes in the knowledge graph", async () => {

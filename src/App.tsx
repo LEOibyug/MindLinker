@@ -27,6 +27,7 @@ import {
 } from "./domain";
 import type { LearningProject, ModelConfig, ProviderApiFormat, ProviderConfig, VectorStore } from "./domain";
 import type { ConversationKnowledgeGraph } from "./domain";
+import { GraphErrorBoundary } from "./GraphErrorBoundary";
 import { KnowledgeGraphView } from "./KnowledgeGraphView";
 import { buildOpenAIInputParts, buildReferenceContext, parseReferenceFile } from "./pdfReferences";
 import type { ParsedReferenceDocument } from "./pdfReferences";
@@ -345,12 +346,15 @@ const getVisiblePartialMarkedAnswer = (text: string) => {
     if (markerEnd === -1) {
       break;
     }
-    const closeMarker = text.indexOf("[[/ml]]", markerEnd + 2);
-    if (closeMarker === -1) {
+    const closeMarkerMatch = text.slice(markerEnd + 2).match(/\[\[\/ml(?::[^\]\n]+)?\]\]/);
+    if (!closeMarkerMatch || closeMarkerMatch.index === undefined) {
+      visible += text.slice(markerEnd + 2);
       break;
     }
+    const closeMarker = markerEnd + 2 + closeMarkerMatch.index;
+    const closeMarkerText = closeMarkerMatch[0];
     visible += text.slice(markerEnd + 2, closeMarker);
-    cursor = closeMarker + "[[/ml]]".length;
+    cursor = closeMarker + closeMarkerText.length;
   }
   return visible;
 };
@@ -936,7 +940,7 @@ const requestChatCompletion = async (
   const instruction = {
     type: "input_text" as const,
     text:
-      `你是面向课程学习、理论知识和论文阅读的学习助手。请严格依据用户上传的参考材料优先回答；如果参考不足，明确说明。输出只包含给用户看的主回复正文，不要输出内部字段名、JSON、调试信息或 answer-xxx 标签。不要以“好的”、“当然”、“我是...助手”、“我将基于...”、“下面我将...”这类寒暄、自我介绍或任务复述开头；不要自我介绍，不要说明你会做什么，直接进入实质内容或合适的标题。请主动为关键词、专有名词、理论概念、定理、公式名、符号含义、方法名和容易产生误解的短语添加解释标记，格式必须完整成对：[[ml:stable-english-id]]术语[[/ml]]；id 只使用小写英文、数字和连字符。同一位置一个标记，不要跨句标记，不要标记整段句子。不要漏掉正文中的核心概念，宁可多标几个可解释点。数学公式请使用 LaTeX，可独立成行时用 $$...$$；分式必须写成 \\frac{...}{...}，例如 \\log\\frac{1}{p(x)}，不要写成 1/p(x) 这类斜杠形式。\n\n${answerModePrompts[answerMode].instruction}`
+      `你是面向课程学习、理论知识和论文阅读的学习助手。请严格依据用户上传的参考材料优先回答；如果参考不足，明确说明。输出只包含给用户看的主回复正文，不要输出内部字段名、JSON、调试信息或 answer-xxx 标签。不要以“好的”、“当然”、“我是...助手”、“我将基于...”、“下面我将...”这类寒暄、自我介绍或任务复述开头；不要自我介绍，不要说明你会做什么，直接进入实质内容或合适的标题。\n\n解释标记格式必须严格遵守：\n- 只允许使用 [[ml:stable-english-id]]术语[[/ml]]。\n- 结束标签必须永远是 [[/ml]]，严禁写成 [[/ml:stable-english-id]] 或任何带 id 的结束标签。\n- id 只使用小写英文、数字和连字符，每个可解释点使用语义化且尽量唯一的 id，不要复用 stable-english-id 这个示例 id。\n- 正确示例：[[ml:cross-entropy]]交叉熵[[/ml]] 会衡量两个分布的差异。\n- 错误示例：[[ml:cross-entropy]]交叉熵[[/ml:cross-entropy]]。\n- 同一位置一个标记，不要跨句标记，不要标记整段句子。\n\n请主动为关键词、专有名词、理论概念、定理、公式名、符号含义、方法名和容易产生误解的短语添加解释标记。不要漏掉正文中的核心概念，宁可多标几个可解释点。数学公式请使用 LaTeX，可独立成行时用 $$...$$；分式必须写成 \\frac{...}{...}，例如 \\log\\frac{1}{p(x)}，不要写成 1/p(x) 这类斜杠形式。\n\n${answerModePrompts[answerMode].instruction}`
   };
   const userPrompt = {
     type: "input_text" as const,
@@ -1106,7 +1110,7 @@ const requestExplanationChain = async (
     .map((term) => `${term.ordinal}. id=${term.id}; term=${term.term}`)
     .join("\n");
   const nestedMarkerInstruction = options.allowNestedMarkers
-    ? "解释正文 body 中如果确实出现还值得继续解释的术语，请使用 [[ml:稳定id]]术语[[/ml]] 标记；不要超过必要数量。"
+    ? "解释正文 body 中如果确实出现还值得继续解释的术语，请使用 [[ml:stable-english-id]]术语[[/ml]] 标记；结束标签必须严格为 [[/ml]]，严禁写成 [[/ml:id]]；id 使用语义化英文小写短横线，不要复用 stable-english-id 这个示例 id；不要超过必要数量。"
     : "解释正文 body 中不要再生成任何 [[ml:id]]...[[/ml]] 待解释标记。";
   const prompt = `为了提升缓存命中，下面先复述上一阶段的对话前缀，再追加解释任务系统提示词。
 
@@ -1695,6 +1699,7 @@ export function App() {
   const activeConversationIdRef = useRef(activeConversationId);
   const homeReferenceRunIdRef = useRef(0);
   const homeReferencePromiseRef = useRef<Promise<ParsedReferenceDocument[]> | null>(null);
+  const streamingLogStateRef = useRef<Record<string, { lastLength: number; lastLoggedAt: number }>>({});
   const [editingTitle, setEditingTitle] = useState(false);
   const [viewMode, setViewMode] = useState<"reader" | "graph">("reader");
   const [generationPhase, setGenerationPhase] = useState<"idle" | "content" | "annotations" | "ready">("idle");
@@ -1726,13 +1731,29 @@ export function App() {
   const projectDocuments = allDocuments.filter((document) => activeDocumentIds.includes(document.id));
   const activeDraft = conversationDrafts[activeConversation.id] ?? null;
   const activeConversationRunning = runningConversationIds.includes(activeConversation.id);
-  const activeKnowledgeGraph = buildProjectKnowledgeGraph(
-    activeProject,
-    activeProjectTitle,
-    projectDocuments,
-    conversationDrafts,
-    conversationExplanations
-  );
+  const activeKnowledgeGraphResult = useMemo(() => {
+    try {
+      return {
+        graph: buildProjectKnowledgeGraph(
+          activeProject,
+          activeProjectTitle,
+          projectDocuments,
+          conversationDrafts,
+          conversationExplanations
+        ),
+        error: null as Error | null
+      };
+    } catch (error) {
+      return {
+        graph: buildDraftKnowledgeGraph({
+          ...(activeDraft ?? buildConversationDraft(activeConversation.title, [], false, "balanced")),
+          title: activeConversation.title
+        }),
+        error: error instanceof Error ? error : new Error(String(error))
+      };
+    }
+  }, [activeConversation.title, activeDraft, activeProject, activeProjectTitle, conversationDrafts, conversationExplanations, projectDocuments]);
+  const activeKnowledgeGraph = activeKnowledgeGraphResult.graph;
   const visibleStack = useMemo(() => [...explanationStack].reverse(), [explanationStack]);
   const activeConversationExplanations = useMemo(
     () => conversationExplanations[activeConversation.id] ?? [],
@@ -1910,6 +1931,7 @@ export function App() {
     };
 
     markConversationRunning(conversationId, "generating-content");
+    delete streamingLogStateRef.current[conversationId];
     if (shouldUpdateVisibleConversation()) {
       setGenerationPhase("content");
     }
@@ -1940,11 +1962,20 @@ export function App() {
           if (!visibleAnswer.trim()) {
             return;
           }
-          appendRuntimeLog("model", "主模型流式片段", {
-            ...runtimeContext,
-            visibleLength: visibleAnswer.length,
-            rawLength: partialAnswer.length
-          });
+          const previousLog = streamingLogStateRef.current[conversationId] ?? { lastLength: 0, lastLoggedAt: 0 };
+          const now = Date.now();
+          if (
+            previousLog.lastLength === 0 ||
+            partialAnswer.length - previousLog.lastLength >= 500 ||
+            now - previousLog.lastLoggedAt >= 1500
+          ) {
+            appendRuntimeLog("model", "主模型流式片段", {
+              ...runtimeContext,
+              visibleLength: visibleAnswer.length,
+              rawLength: partialAnswer.length
+            });
+            streamingLogStateRef.current[conversationId] = { lastLength: partialAnswer.length, lastLoggedAt: now };
+          }
           setVisibleConversationDrafts((drafts) => ({
             ...drafts,
             [conversationId]: {
@@ -2075,6 +2106,7 @@ export function App() {
         logDebugMessage(message);
       }
       markConversationSettled(conversationId, "ready");
+      delete streamingLogStateRef.current[conversationId];
       if (shouldUpdateVisibleConversation()) {
         setGenerationPhase("ready");
       }
@@ -2091,6 +2123,7 @@ export function App() {
         }
       }));
       markConversationSettled(conversationId, "idle");
+      delete streamingLogStateRef.current[conversationId];
       if (shouldUpdateVisibleConversation()) {
         setGenerationPhase("idle");
       }
@@ -3786,7 +3819,33 @@ export function App() {
           </div>
 
           {viewMode === "graph" ? (
-            <KnowledgeGraphView graph={activeKnowledgeGraph} title={activeConversation.title} />
+            activeKnowledgeGraphResult.error ? (
+              <section className="graph-error-panel" role="alert" aria-label="知识图谱渲染失败">
+                <h2>知识图谱暂时无法渲染</h2>
+                <p>当前对话内容仍然可用。已记录错误信息，可以切回阅读器继续查看正文。</p>
+              </section>
+            ) : (
+              <GraphErrorBoundary
+                onError={(error, info) => {
+                  appendRuntimeLog(
+                    "graph",
+                    "知识图谱渲染失败",
+                    {
+                      message: error.message,
+                      stack: error.stack,
+                      componentStack: info.componentStack,
+                      projectId: activeProject.id,
+                      conversationId: activeConversation.id,
+                      nodeCount: activeKnowledgeGraph.nodes.length,
+                      edgeCount: activeKnowledgeGraph.edges.length
+                    },
+                    "error"
+                  );
+                }}
+              >
+                <KnowledgeGraphView graph={activeKnowledgeGraph} title={activeConversation.title} />
+              </GraphErrorBoundary>
+            )
           ) : newConversationOpen ? (
             <article className="answer-document new-conversation-canvas" aria-label="新建对话面板">
               {renderNewConversationPanel()}

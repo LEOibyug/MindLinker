@@ -56,3 +56,20 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "renders formulas inside model explanation cards|removes markdown wrappers from formula blocks|removes formula wrapper quotes|renders standalone quoted math-like lines"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - Streaming Markers And Graph Crash Guard
+
+- Fixed streaming preview truncation when a provider emits id-suffixed closing tags such as `[[/ml:stable-english-id]]`.
+- Tightened the main-answer and nested-explanation prompts with explicit correct and incorrect marker examples:
+  - correct: `[[ml:cross-entropy]]交叉熵[[/ml]]`
+  - incorrect: `[[ml:cross-entropy]]交叉熵[[/ml:cross-entropy]]`
+- Added a graph error boundary and a graph-build fallback panel so graph render/build failures no longer blank the whole app.
+- Reduced runtime log pressure by sampling streaming progress instead of writing every chunk.
+- Regression coverage:
+  - streamed id-suffixed closing marker stays visible and strips markers;
+  - graph error boundary displays a fallback instead of crashing the app.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "keeps streaming visible|shows a graph fallback"`
+  - `npm test -- src/App.test.tsx -t "graph|formula|math|streams the main answer|incomplete markup"`
+  - `npm test`
+  - `npm run build`
