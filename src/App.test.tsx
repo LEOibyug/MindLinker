@@ -2182,6 +2182,57 @@ describe("MindLinker shell", () => {
     expect(details).not.toHaveTextContent("$f(");
   });
 
+  it("renders bare formulas and strips leaked explanation tags in graph details", async () => {
+    const user = userEvent.setup();
+    seedExistingProjects();
+    window.localStorage.setItem(
+      "mindlinker.conversationDrafts",
+      JSON.stringify({
+        "cross-entropy": {
+          title: "Log-sum inequality",
+          prompt: "解释 Log-sum 不等式",
+          answerMode: "balanced",
+          referenceMode: "direct",
+          referenceTitles: [],
+          referenceContext: "",
+          openAIInputPreview: "",
+          answerMarkdown: "Log-sum不等式用于证明 KL 散度非负性。",
+          modelStatus: "generated",
+          generated: true,
+          explanationTerms: []
+        }
+      })
+    );
+    window.localStorage.setItem(
+      "mindlinker.conversationExplanations",
+      JSON.stringify({
+        "cross-entropy": [
+          {
+            id: "log-sum-inequality",
+            term: "Log-sum不等式",
+            body:
+              "一个对非负数列 a_i 和 b_i 成立的不等式：Σ a_i log(a_i/b_i) ≥ (Σ a_i) log((Σ a_i)/(Σ b_i))。等号成立当且仅当所有比值 a_i/b_i 相等。证明本质上是用 [[jensen-inequality]]Jensen不等式 应用于凸函数 f(x)=x log x。这个不等式是证明 [[kl-divergence]]KL散度 非负性的重要工具。",
+            source: "来源：当前参考",
+            nested: [],
+            referenceState: "refs:test"
+          }
+        ]
+      })
+    );
+    render(<App />);
+    await enterWorkspace(user);
+    await user.click(screen.getByRole("button", { name: "知识图谱" }));
+
+    const graph = screen.getByRole("region", { name: "知识图谱" });
+    fireEvent.click(within(graph).getByRole("button", { name: "Log-sum不等式" }));
+    const details = within(graph).getByRole("complementary", { name: "节点详情" });
+
+    expect(details.querySelector(".inline-math .katex")).toBeInTheDocument();
+    expect(details.querySelector(".inline-math .mfrac")).toBeInTheDocument();
+    expect(details).not.toHaveTextContent("[[jensen-inequality]]");
+    expect(details).not.toHaveTextContent("[[kl-divergence]]");
+  });
+
   it("allows zooming, panning, and selecting nodes in the knowledge graph", async () => {
     const user = userEvent.setup();
     renderWithSeededProjects();

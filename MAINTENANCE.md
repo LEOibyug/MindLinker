@@ -38,3 +38,21 @@ This project now uses git commits as bug-fix checkpoints.
   - `npm test -- src/App.test.tsx -t "records model replies"`
   - `npm test`
   - `npm run build`
+
+### 2026-05-28 - Graph Detail Formula Rendering
+
+- Fixed knowledge-graph node detail text rendering for model explanations that contain bare math expressions such as `Σ a_i log(a_i/b_i) ≥ ...`.
+- The graph detail renderer now:
+  - strips leaked malformed explanation tags such as `[[jensen-inequality]]Jensen不等式`;
+  - renders obvious bare formulas with KaTeX;
+  - normalizes slash fractions inside those formulas to `\frac{...}{...}`.
+- Scope intentionally stayed inside `KnowledgeGraphView.tsx`; main-answer and explanation-card renderers were not changed.
+- Regression coverage:
+  - added a graph-detail test for bare formulas, slash fractions, and leaked tags;
+  - reran graph/formula-related tests to guard previous fixes.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "renders bare formulas"`
+  - `npm test -- src/App.test.tsx -t "graph|formula|math|tags"`
+  - `npm test -- src/App.test.tsx -t "renders formulas inside model explanation cards|removes markdown wrappers from formula blocks|removes formula wrapper quotes|renders standalone quoted math-like lines"`
+  - `npm test`
+  - `npm run build`

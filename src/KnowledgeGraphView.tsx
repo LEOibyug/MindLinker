@@ -102,6 +102,12 @@ const stripFormulaMarkdownWrappers = (value: string) => {
 
 const normalizeSlashFractions = (expression: string) =>
   expression
+    .replace(/Σ/g, "\\sum")
+    .replace(/∑/g, "\\sum")
+    .replace(/≥/g, "\\ge")
+    .replace(/≤/g, "\\le")
+    .replace(/≠/g, "\\ne")
+    .replace(/≈/g, "\\approx")
     .replace(/\(([^()\n]+)\)\s*\/\s*\(([^()\n]+)\)/g, "\\frac{$1}{$2}")
     .replace(
       /(?<![\\\w])([A-Za-z](?:_\{[^{}]+\}|_[A-Za-z0-9]+|\^\{[^{}]+\}|\^[A-Za-z0-9]+)*)\/([A-Za-z](?:_\{[^{}]+\}|_[A-Za-z0-9]+|\^\{[^{}]+\}|\^[A-Za-z0-9]+)*)/g,
@@ -116,8 +122,42 @@ const normalizeGraphMathExpression = (expression: string) =>
       .trim()
   );
 
+const stripLeakedExplanationTags = (text: string) =>
+  text
+    .replace(/\[\[ml:[^\]]+\]\]([\s\S]*?)\[\[\/ml\]\]/g, "$1")
+    .replace(/\[\[[a-z0-9-]+\]\]([\u4e00-\u9fffA-Za-z0-9_\- ]+)/gi, "$1")
+    .replace(/\[\[\/?ml(?::[^\]]+)?\]\]/g, "")
+    .replace(/\[\[[^\]]+\]\]/g, "");
+
+const bareMathPattern =
+  /(?:[Σ∑][^。；，,.!?！？\n]*(?:[≥≤=≈≠]|\\ge|\\le)[^。；，,.!?！？\n]*|[A-Za-z]\([^)]*\)\s*=\s*[^。；，,.!?！？\n]*|[A-Za-z](?:_\{?[\w]+\}?|_[\w]+)?\/[A-Za-z](?:_\{?[\w]+\}?|_[\w]+)?)/g;
+
 const renderGraphDetailText = (text: string) => {
-  const parts = text.split(/(\$\$[\s\S]+?\$\$|\\\([\s\S]+?\\\)|\$[^$\n]+\$)/g);
+  const cleanText = stripLeakedExplanationTags(text);
+  const parts = cleanText.split(/(\$\$[\s\S]+?\$\$|\\\([\s\S]+?\\\)|\$[^$\n]+\$)/g);
+  const renderPlainTextWithBareMath = (value: string, keyPrefix: string) => {
+    const elements = [];
+    let cursor = 0;
+    Array.from(value.matchAll(bareMathPattern)).forEach((match, matchIndex) => {
+      const rawMatch = match[0];
+      const start = match.index ?? 0;
+      if (start > cursor) {
+        elements.push(<span key={`${keyPrefix}-text-${matchIndex}`}>{value.slice(cursor, start)}</span>);
+      }
+      elements.push(
+        <span
+          className="inline-math"
+          dangerouslySetInnerHTML={{ __html: renderMathHtml(normalizeGraphMathExpression(rawMatch)) }}
+          key={`${keyPrefix}-math-${matchIndex}`}
+        />
+      );
+      cursor = start + rawMatch.length;
+    });
+    if (cursor < value.length) {
+      elements.push(<span key={`${keyPrefix}-text-end`}>{value.slice(cursor)}</span>);
+    }
+    return elements.length > 0 ? elements : <span key={`${keyPrefix}-plain`}>{value}</span>;
+  };
   return parts.map((part, index) => {
     if (part.startsWith("$$") && part.endsWith("$$")) {
       return (
@@ -146,7 +186,7 @@ const renderGraphDetailText = (text: string) => {
         />
       );
     }
-    return <span key={`${index}-${part}`}>{part}</span>;
+    return renderPlainTextWithBareMath(part, `${index}-${part}`);
   });
 };
 
