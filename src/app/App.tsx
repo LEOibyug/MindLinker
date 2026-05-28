@@ -23,6 +23,12 @@ import type { InlineConversation, InlineConversationMarkerBinding, InlineConvers
 import { ExplanationPanel } from "../components/panels/ExplanationPanel";
 import { buildDraftKnowledgeGraph, buildFallbackMarkedTerms, buildProjectKnowledgeGraph } from "../domain/knowledgeGraph";
 import {
+  buildHomeReferenceItems,
+  buildHomeReferenceStatusText,
+  removeHomeReferenceItem,
+  resolveHomeReferenceDocuments
+} from "../services/homeReferences";
+import {
   buildRewritePrompt,
   findChatModelConfig,
   requestChatCompletion,
@@ -844,20 +850,7 @@ export function App() {
   };
 
   const getHomeReferenceStatusText = () => {
-    if (homeReferenceItems.length === 0) {
-      return null;
-    }
-    const parsingCount = homeReferenceItems.filter((item) => item.status === "parsing").length;
-    const failedCount = homeReferenceItems.filter((item) => item.status === "failed").length;
-    if (parsingCount > 0) {
-      return homeStartWaiting
-        ? `正在本地解析参考，完成后会自动进入对话 · 剩余 ${parsingCount} 份`
-        : `正在本地解析参考 · 剩余 ${parsingCount} 份`;
-    }
-    if (failedCount > 0) {
-      return `参考已准备好，${failedCount} 份解析失败但会保留诊断`;
-    }
-    return `参考已准备好 · ${homeReferenceItems.length} 份`;
+    return buildHomeReferenceStatusText(homeReferenceItems, homeStartWaiting);
   };
 
   const displayHomeParsedDocument = async (runId: number, index: number, document: ParsedReferenceDocument) => {
@@ -885,12 +878,7 @@ export function App() {
       return homeReferencePromiseRef.current;
     }
 
-    const nextItems = files.map((file, index) => ({
-      key: `${file.name}-${file.size}-${file.lastModified}-${index}`,
-      fileName: file.name,
-      fingerprint: getFileFingerprint(file),
-      status: "parsing" as const
-    }));
+    const nextItems = buildHomeReferenceItems(files);
     setHomeReferenceItems(nextItems);
     const parsePromise = Promise.all(
       files.map(async (file, index) => {
@@ -922,21 +910,18 @@ export function App() {
   };
 
   const removeHomeReference = (key: string) => {
-    const removedItem = homeReferenceItems.find((item) => item.key === key);
+    const result = removeHomeReferenceItem({ files: homeFiles, items: homeReferenceItems, key });
+    const { removedItem } = result;
     if (!removedItem) {
       return;
     }
-    setHomeFiles((files) => files.filter((file) => getFileFingerprint(file) !== removedItem.fingerprint));
-    setHomeReferenceItems((items) => items.filter((item) => item.key !== key));
+    setHomeFiles(result.files);
+    setHomeReferenceItems(result.items);
     const activePromise = homeReferencePromiseRef.current;
     removedHomeReferenceKeysRef.current = new Set([...removedHomeReferenceKeysRef.current, key]);
     homeReferencePromiseRef.current = activePromise
       ? activePromise.then((documents) =>
-          homeReferenceItems.some((item) => item.document)
-            ? homeReferenceItems
-                .filter((item) => item.key !== key && item.document)
-                .map((item) => item.document as ParsedReferenceDocument)
-            : documents
+          resolveHomeReferenceDocuments(result.items, documents, result.hadResolvedDocuments)
         )
       : Promise.resolve([]);
   };

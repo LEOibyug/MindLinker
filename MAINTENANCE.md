@@ -12,6 +12,22 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Home Reference Logic Refactor
+
+- Extracted home-screen reference preflight helpers from `App.tsx` into `services/homeReferences.ts`.
+- Kept async parsing, local state, and project creation orchestration in `App.tsx` while moving pure logic for:
+  - building pending home reference items from selected files;
+  - summarizing parsing/ready/failed status text;
+  - removing a pending reference and its backing file;
+  - preserving the previous parsed-document behavior after a user removes an already parsed reference.
+- Added module-level tests for file item generation, status text, and removal/document-resolution behavior.
+- Reduced `App.tsx` from roughly 2,040 lines to roughly 2,025 lines.
+- Verification:
+  - `npm test -- --run src/services/homeReferences.test.ts`
+  - `npm test -- --run src/app/App.test.tsx -t "home references|attached home reference|appends home references|prepares home references|prominent parsing|starts a usable project|home-style project starter|removes an attached home reference"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Source Directory Structure Refactor
 
 - Reorganized `src/` into responsibility-oriented directories:
