@@ -220,7 +220,28 @@ describe("MindLinker shell", () => {
     await user.upload(screen.getByLabelText("添加参考文件"), [new File(["notes"], "notes.md", { type: "text/markdown" })]);
 
     await waitFor(() => expect(screen.getByRole("status", { name: "参考准备状态" })).toHaveTextContent("参考已准备好"));
-    expect(screen.getByText(/notes.md/)).toHaveTextContent("已解析");
+    expect(screen.getByText(/notes.md/).closest(".home-file-pill")).toHaveTextContent("已解析");
+  });
+
+  it("removes an attached home reference before starting a project", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+
+    await user.upload(screen.getByLabelText("添加参考文件"), [
+      new File(["keep"], "keep.md", { type: "text/markdown" }),
+      new File(["remove"], "remove.md", { type: "text/markdown" })
+    ]);
+    await waitFor(() => expect(screen.getByRole("status", { name: "参考准备状态" })).toHaveTextContent("参考已准备好 · 2 份"));
+
+    await user.click(screen.getByRole("button", { name: "移除待导入参考 remove.md" }));
+
+    expect(screen.queryByText("remove.md")).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "参考准备状态" })).toHaveTextContent("参考已准备好 · 1 份");
+
+    await user.click(screen.getByRole("button", { name: "开始学习" }));
+
+    expect(screen.getByText("keep.md")).toBeInTheDocument();
+    expect(screen.queryByText("remove.md")).not.toBeInTheDocument();
   });
 
   it("shows a prominent parsing state while home references are still being prepared", async () => {

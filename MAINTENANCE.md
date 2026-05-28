@@ -12,6 +12,20 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Home Reference Removal
+
+- Added a remove button to each reference attached on the home screen before a project is created.
+- Removing a home reference now updates the visible preflight list, the pending file set, and the parsed-reference promise used by project creation.
+- Guarded the parsing race where a deleted reference could finish parsing later and still be imported into the new project.
+- Regression coverage:
+  - attached home references can be removed before starting;
+  - removed references do not appear in the created project;
+  - existing home reference preparation and home project creation flows remain stable.
+- Verification:
+  - `npm test -- src/App.test.tsx -t "home references|attached home reference|starts a usable project from the home prompt|starts a project from home with references"`
+  - `npm test`
+  - `npm run build`
+
 ### 2026-05-28 - Inline Question Position Anchors
 
 - Fixed saved inline question markers so new conversations anchor to a character position in the rendered answer instead of matching every repeated text fragment.

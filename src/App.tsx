@@ -158,6 +158,7 @@ type AnswerMode = "summary" | "balanced" | "lecture";
 type HomeReferenceItem = {
   key: string;
   fileName: string;
+  fingerprint: string;
   status: "parsing" | "ready" | "failed";
   document?: ParsedReferenceDocument;
   error?: string;
@@ -2537,6 +2538,7 @@ export function App() {
   const activeConversationIdRef = useRef(activeConversationId);
   const homeReferenceRunIdRef = useRef(0);
   const homeReferencePromiseRef = useRef<Promise<ParsedReferenceDocument[]> | null>(null);
+  const removedHomeReferenceKeysRef = useRef<Set<string>>(new Set());
   const streamingLogStateRef = useRef<Record<string, { lastLength: number; lastLoggedAt: number }>>({});
   const [editingTitle, setEditingTitle] = useState(false);
   const [viewMode, setViewMode] = useState<"reader" | "graph">("reader");
@@ -3190,6 +3192,7 @@ export function App() {
   const parseHomeReferences = (files: File[]) => {
     const runId = homeReferenceRunIdRef.current + 1;
     homeReferenceRunIdRef.current = runId;
+    removedHomeReferenceKeysRef.current = new Set();
     setHomeFiles(files);
     setHomeStartWaiting(false);
     if (files.length === 0) {
@@ -3198,21 +3201,24 @@ export function App() {
       return homeReferencePromiseRef.current;
     }
 
-    setHomeReferenceItems(
-      files.map((file, index) => ({
-        key: `${file.name}-${file.size}-${file.lastModified}-${index}`,
-        fileName: file.name,
-        status: "parsing"
-      }))
-    );
+    const nextItems = files.map((file, index) => ({
+      key: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+      fileName: file.name,
+      fingerprint: getFileFingerprint(file),
+      status: "parsing" as const
+    }));
+    setHomeReferenceItems(nextItems);
     const parsePromise = Promise.all(
       files.map(async (file, index) => {
         const document = await parseReferenceFileWithCache(file, `home-preview-${runId}`, index);
         void displayHomeParsedDocument(runId, index, document);
-        return document;
+        return { key: nextItems[index].key, document };
       })
     )
-      .then((documents) => {
+      .then((results) => {
+        const documents = results
+          .filter((result) => !removedHomeReferenceKeysRef.current.has(result.key))
+          .map((result) => result.document);
         if (runId === homeReferenceRunIdRef.current) {
           logParsedDocuments(documents);
         }
@@ -3229,6 +3235,26 @@ export function App() {
 
     homeReferencePromiseRef.current = parsePromise;
     return parsePromise;
+  };
+
+  const removeHomeReference = (key: string) => {
+    const removedItem = homeReferenceItems.find((item) => item.key === key);
+    if (!removedItem) {
+      return;
+    }
+    setHomeFiles((files) => files.filter((file) => getFileFingerprint(file) !== removedItem.fingerprint));
+    setHomeReferenceItems((items) => items.filter((item) => item.key !== key));
+    const activePromise = homeReferencePromiseRef.current;
+    removedHomeReferenceKeysRef.current = new Set([...removedHomeReferenceKeysRef.current, key]);
+    homeReferencePromiseRef.current = activePromise
+      ? activePromise.then((documents) =>
+          homeReferenceItems.some((item) => item.document)
+            ? homeReferenceItems
+                .filter((item) => item.key !== key && item.document)
+                .map((item) => item.document as ParsedReferenceDocument)
+            : documents
+        )
+      : Promise.resolve([]);
   };
 
   const getReadyHomeReferencesForProject = async (projectId: string) => {
@@ -4531,8 +4557,16 @@ export function App() {
                   <div className="home-file-list" aria-label="待导入参考">
                     {homeReferenceItems.map((item) => (
                       <span className={`home-file-pill ${item.status}`} key={item.key}>
-                        {item.fileName}
+                        <span className="home-file-name">{item.fileName}</span>
                         <small>{item.status === "parsing" ? "解析中" : item.status === "failed" ? "解析失败" : "已解析"}</small>
+                        <button
+                          className="home-file-remove"
+                          type="button"
+                          aria-label={`移除待导入参考 ${item.fileName}`}
+                          onClick={() => removeHomeReference(item.key)}
+                        >
+                          <X aria-hidden="true" size={12} />
+                        </button>
                       </span>
                     ))}
                   </div>
