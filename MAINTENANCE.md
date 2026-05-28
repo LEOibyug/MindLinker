@@ -12,6 +12,17 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Inline Conversation Action Hook Refactor
+
+- Extracted position-question insertion, inline question streaming, saved thread persistence, and model-generated inline titles from `App.tsx` into `app/useInlineConversationActions.ts`.
+- Kept `App.tsx` responsible for selecting active project/conversation state and rendering the inline dialog.
+- Added hook tests for context-menu anchored insertion, streamed inline answers, saved question threads, and generated summary titles.
+- Reduced `App.tsx` from roughly 1,231 lines to roughly 1,131 lines.
+- Verification:
+  - `npm test -- --run src/app/useInlineConversationActions.test.tsx`
+  - `npm test -- --run src/app/App.test.tsx -t "inline question|inline conversation|位置提问|小对话|summary panel|streams inline|保存当前位置|查看位置提问"`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Settings and Explanation Action Hook Refactor
 
 - Extracted provider/model settings mutations and diagnostics from `App.tsx` into `app/useProviderSettingsActions.ts`.

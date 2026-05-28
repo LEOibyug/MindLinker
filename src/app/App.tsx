@@ -15,16 +15,11 @@ import type { ConversationKnowledgeGraph } from "../domain/types";
 import type { Explanation } from "../domain/explanations";
 import { bindExplanationsToAnswerText, getExplanationAnchorTerm, normalizeTermForMatch } from "../domain/explanations";
 import { InlineConversationDialog, renderInlineConversationMarker } from "../components/inline-conversation/InlineConversationUi";
-import {
-  buildInlineConversationDraftFromAnchor,
-  buildSavedInlineConversation,
-  getInlineConversationTitle
-} from "../domain/inlineConversations";
+import { getInlineConversationTitle } from "../domain/inlineConversations";
 import type {
   InlineConversation,
   InlineConversationDraft,
   InlineConversationMarkerBinding,
-  InlineConversationMessage
 } from "../domain/inlineConversations";
 import { ExplanationPanel } from "../components/panels/ExplanationPanel";
 import { buildDraftKnowledgeGraph, buildProjectKnowledgeGraph } from "../domain/knowledgeGraph";
@@ -43,12 +38,7 @@ import {
   getConversationGenerationPhase,
   removeProjectDocument
 } from "../domain/projectLifecycle";
-import {
-  buildRewritePrompt,
-  findChatModelConfig,
-  requestInlineConversationTitle,
-  requestInlineQuestionAnswer,
-} from "../services/modelClient";
+import { buildRewritePrompt } from "../services/modelClient";
 import { parseReferenceFile } from "../services/pdfReferences";
 import type { ParsedReferenceDocument } from "../services/pdfReferences";
 import { getActiveProviderId } from "../services/providerSettings";
@@ -72,6 +62,7 @@ import { WorkspaceView } from "./WorkspaceView";
 import { useConversationGeneration } from "./useConversationGeneration";
 import { useProviderSettingsActions } from "./useProviderSettingsActions";
 import { useExplanationActions } from "./useExplanationActions";
+import { useInlineConversationActions } from "./useInlineConversationActions";
 
 const emptyKnowledgeGraph: ConversationKnowledgeGraph = {
   nodes: [],
@@ -366,6 +357,29 @@ export function App() {
     setExplanationStack,
     setManualExplanationPending,
     setNotice,
+    logDebugMessage
+  });
+
+  const {
+    insertInlineConversation,
+    openInlineConversation,
+    sendInlineQuestion,
+    saveInlineConversationDraft
+  } = useInlineConversationActions({
+    activeConversationId: activeConversation.id,
+    activeDraft,
+    activeProjectId: activeProject.id,
+    activeProviderId,
+    contextMenu,
+    customProviders,
+    inlineConversationDraft,
+    projectDocuments,
+    setContextMenu,
+    setInlineConversationDraft,
+    setInlineConversations,
+    setInlineQuestionPending,
+    setNotice,
+    setViewMode,
     logDebugMessage
   });
 
@@ -825,123 +839,6 @@ export function App() {
     }
     setRewriteDraft(contextMenu.selectedText);
     setContextMenu(null);
-  };
-
-  const insertInlineConversation = () => {
-    setInlineConversationDraft(
-      buildInlineConversationDraftFromAnchor({
-        selectedText: contextMenu?.selectedText ?? "",
-        anchorOffset: contextMenu?.anchorOffset,
-        anchorLength: contextMenu?.anchorLength,
-        anchorText: contextMenu?.anchorText
-      })
-    );
-    setContextMenu(null);
-  };
-
-  const openInlineConversation = (conversation: InlineConversation) => {
-    setViewMode("reader");
-    window.requestAnimationFrame(() => {
-      const marker = document.querySelector<HTMLElement>(`[data-inline-conversation-id="${conversation.id}"]`);
-      marker?.scrollIntoView({ block: "center", behavior: "smooth" });
-    });
-    setInlineConversationDraft({
-      id: conversation.id,
-      anchor: conversation.anchor,
-      anchorOffset: conversation.anchorOffset,
-      anchorLength: conversation.anchorLength,
-      anchorText: conversation.anchorText,
-      positionLabel: conversation.positionLabel,
-      question: "",
-      messages: conversation.messages,
-      saved: true
-    });
-  };
-
-  const sendInlineQuestion = async (rawQuestion?: string) => {
-    const draftSnapshot = inlineConversationDraft;
-    const question = rawQuestion?.trim() ?? draftSnapshot?.question.trim() ?? "";
-    if (!question) {
-      setNotice("请输入要提问的内容");
-      return;
-    }
-    if (!draftSnapshot) {
-      return;
-    }
-    const chatConfig = findChatModelConfig(customProviders, activeProviderId);
-    if (!chatConfig) {
-      setNotice("请在设置中配置可用的主模型 API");
-      return;
-    }
-    const previousMessages = draftSnapshot.messages;
-    const nextMessages: InlineConversationMessage[] = [...previousMessages, { role: "user", content: question }];
-    setInlineConversationDraft((draft) => (draft ? { ...draft, question: "", messages: [...nextMessages, { role: "assistant", content: "" }] } : draft));
-    setInlineQuestionPending(true);
-    try {
-      const answer = await requestInlineQuestionAnswer(
-        question,
-        activeDraft,
-        projectDocuments,
-        draftSnapshot.positionLabel,
-        previousMessages,
-        chatConfig.provider,
-        chatConfig.model,
-        (partialAnswer) => {
-          setInlineConversationDraft((draft) =>
-            draft
-              ? {
-                  ...draft,
-                  messages: [...nextMessages, { role: "assistant", content: partialAnswer }]
-                }
-              : draft
-          );
-        }
-      );
-      setInlineConversationDraft((draft) =>
-        draft ? { ...draft, messages: [...nextMessages, { role: "assistant", content: answer }] } : draft
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setNotice(message);
-      setInlineConversationDraft((draft) =>
-        draft ? { ...draft, messages: [...nextMessages, { role: "assistant", content: message }] } : draft
-      );
-    } finally {
-      setInlineQuestionPending(false);
-    }
-  };
-
-  const saveInlineConversationDraft = () => {
-    if (!inlineConversationDraft || inlineConversationDraft.messages.length === 0) {
-      setNotice("请输入要保存的位置对话内容");
-      return;
-    }
-    const conversation = buildSavedInlineConversation({
-      id: `inline-${Date.now()}`,
-      draft: inlineConversationDraft,
-      projectId: activeProject.id,
-      conversationId: activeConversation.id
-    });
-    setInlineConversations((conversations) => [conversation, ...conversations.filter((item) => item.id !== conversation.id)]);
-    setInlineConversationDraft(null);
-    setInlineQuestionPending(false);
-    setNotice("已保存当前位置的小对话");
-    const chatConfig = findChatModelConfig(customProviders, activeProviderId);
-    if (chatConfig) {
-      void requestInlineConversationTitle(conversation, chatConfig.provider, chatConfig.model)
-        .then((title) => {
-          if (!title) {
-            return;
-          }
-          setInlineConversations((conversations) =>
-            conversations.map((item) => (item.id === conversation.id ? { ...item, title } : item))
-          );
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          logDebugMessage(message);
-        });
-    }
   };
 
   const introduceReference = () => {
