@@ -53,6 +53,7 @@ MindLinker 仍处于早期开发阶段。核心阅读、参考导入、模型对
 
 - Node.js 20 或更新版本
 - npm
+- Git
 - 如需调用真实模型，需要准备对应模型供应商的 API Key
 
 ### 安装依赖
@@ -74,6 +75,87 @@ npm run dev
 ```bash
 npm run start:desktop
 ```
+
+### 不同平台运行
+
+MindLinker 的目标形态是 Electron 桌面应用。开发和本地体验时，请优先使用 `npm run dev` 或 `npm run start:desktop`，不要只把它当作普通网页运行。
+
+#### macOS
+
+```bash
+git clone git@github.com:LEOibyug/MindLinker.git
+cd MindLinker
+npm install
+npm run dev
+```
+
+如果需要先构建再启动桌面应用：
+
+```bash
+npm run start:desktop
+```
+
+开发模式下通常不需要额外配置。未来如果制作正式安装包，可能还需要处理 macOS 代码签名、公证和 Gatekeeper 相关问题；这些不影响当前的本地开发运行。
+
+#### Linux
+
+```bash
+git clone git@github.com:LEOibyug/MindLinker.git
+cd MindLinker
+npm install
+npm run dev
+```
+
+Linux 下需要图形桌面环境。若在服务器、容器或无桌面环境中运行，Electron 窗口可能无法启动，需要额外配置 X11、Wayland 或远程桌面环境。
+
+不同发行版可能需要安装 Electron 依赖的系统库，例如 GTK、NSS、X11/Wayland 相关库。若 Electron 启动时报系统库缺失，请按报错提示安装对应发行版的软件包。
+
+#### Windows
+
+依赖安装方式相同：
+
+```bash
+git clone git@github.com:LEOibyug/MindLinker.git
+cd MindLinker
+npm install
+```
+
+当前 `dev:electron` 脚本使用了 macOS/Linux shell 风格的环境变量写法：
+
+```bash
+VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .
+```
+
+因此在 Windows 原生 `cmd.exe` 或 PowerShell 中直接运行 `npm run dev` 可能失败。推荐优先使用 Git Bash 或 WSL：
+
+```bash
+npm run dev
+```
+
+如果使用 PowerShell，可以分两个终端启动：
+
+终端 1：
+
+```bash
+npm run dev:renderer
+```
+
+终端 2：
+
+```powershell
+$env:VITE_DEV_SERVER_URL="http://127.0.0.1:5173"
+npx electron .
+```
+
+后续可以引入 `cross-env`，将脚本改为跨平台写法，让 Windows、macOS 和 Linux 都能直接使用 `npm run dev`。
+
+#### 浏览器预览与桌面应用的区别
+
+`npm run preview` 只用于预览 Vite 构建后的渲染页面，不代表完整桌面应用环境。涉及本地文件、Electron 主进程、桌面窗口和应用级持久化的功能，应使用 Electron 启动方式验证。
+
+#### 关于安装包
+
+项目目前还没有接入 `electron-builder`、Electron Forge 等打包工具，也没有正式的 `.dmg`、`.exe`、`.AppImage` 或 `.deb` 发布产物。当前推荐方式是源码本地运行；如需面向普通用户分发，还需要补充跨平台打包、签名和发布流程。
 
 ## 配置模型
 
