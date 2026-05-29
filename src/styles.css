@@ -1134,6 +1134,33 @@ h3 {
   background: #fbfcfe;
 }
 
+.reference-image-figure {
+  display: block;
+  max-width: 760px;
+  margin: 14px 0 18px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.reference-image-figure img {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.reference-image-caption {
+  display: block;
+  border-top: 1px solid #e1e8f2;
+  padding: 8px 12px;
+  color: #667287;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .formula-block {
   max-width: 760px;
   overflow: auto;

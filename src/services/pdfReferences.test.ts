@@ -89,6 +89,7 @@ describe("PDF reference processor", () => {
     const getViewport = vi.fn(() => ({ width: 320, height: 480 }));
     vi.doMock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
       VerbosityLevel: { INFOS: 5 },
+      OPS: {},
       getDocument: () => ({
         promise: Promise.resolve({
           numPages: 1,
@@ -127,5 +128,58 @@ describe("PDF reference processor", () => {
       })
     );
     expect(documentReference.pages[0].imageDataUrl).toBe("data:image/png;base64,renderedPage");
+  });
+
+  it("keeps PDF embedded images as separately citable reference image assets", async () => {
+    vi.doMock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
+      VerbosityLevel: { INFOS: 5 },
+      OPS: {
+        paintImageXObject: 85,
+        paintInlineImageXObject: 86
+      },
+      getDocument: () => ({
+        promise: Promise.resolve({
+          numPages: 1,
+          getPage: async () => ({
+            getTextContent: async () => ({ items: [{ str: "page text with enough length to avoid screenshot rendering ".repeat(4) }] }),
+            getOperatorList: async () => ({
+              fnArray: [85, 86],
+              argsArray: [["img_xobject"], [{ dataUrl: "data:image/png;base64,inline-image", width: 40, height: 20 }]
+              ]
+            }),
+            objs: {
+              get: (name: string) => (name === "img_xobject" ? { dataUrl: "data:image/png;base64,xobject-image", width: 80, height: 40 } : null)
+            }
+          })
+        })
+      })
+    }));
+
+    const { buildReferenceContext: buildContextWithMockedPdfJs, parseReferenceFile: parseWithMockedPdfJs } = await import("./pdfReferences");
+    const documentReference = await parseWithMockedPdfJs(
+      new File([new Uint8Array([1, 2, 3])], "figures.pdf", { type: "application/pdf" }),
+      "project-test",
+      3,
+      false
+    );
+    const context = buildContextWithMockedPdfJs([documentReference]);
+
+    expect(documentReference.images).toEqual([
+      expect.objectContaining({
+        id: expect.stringMatching(/project-test-reference-3-\d+-p1-img1/),
+        documentTitle: "figures.pdf",
+        pageNumber: 1,
+        dataUrl: "data:image/png;base64,xobject-image"
+      }),
+      expect.objectContaining({
+        id: expect.stringMatching(/project-test-reference-3-\d+-p1-img2/),
+        documentTitle: "figures.pdf",
+        pageNumber: 1,
+        dataUrl: "data:image/png;base64,inline-image"
+      })
+    ]);
+    expect(context).toContain("<REFERENCE_IMAGE");
+    expect(context).toContain("figures.pdf");
+    expect(documentReference.images?.[0].dataUrl).not.toBe(documentReference.pages[0].imageDataUrl);
   });
 });

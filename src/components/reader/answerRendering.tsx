@@ -6,6 +6,7 @@ import type { Explanation } from "../../domain/explanations";
 import { bindExplanationsToAnswerText, getExplanationAnchorTerm } from "../../domain/explanations";
 import type { InlineConversation, InlineConversationMarkerBinding } from "../../domain/inlineConversations";
 import { getInlineConversationAnchorText } from "../../domain/inlineConversations";
+import type { ReferenceImageAsset } from "../../services/pdfReferences";
 import { normalizePlainTextForAnchor } from "../../domain/textAnchors";
 import { isMarkdownListLine, normalizeMathExpression, parseAnswerBlocks } from "./answerParsing";
 
@@ -92,6 +93,51 @@ const renderInlineMarkdown = (text: string) => {
   });
 };
 
+const referenceImageTagPattern = /(\[\[ref-image:([A-Za-z0-9_.:-]+)\]\]|<ref-image\s+id=["']([A-Za-z0-9_.:-]+)["']\s*\/?>)/g;
+
+const ReferenceImage = ({ image }: { image: ReferenceImageAsset }) => (
+  <span className="reference-image-figure" role="group">
+    <img src={image.dataUrl} alt={image.alt} />
+    <span className="reference-image-caption">
+      {image.documentTitle}
+      {image.pageNumber ? ` · p.${image.pageNumber}` : ""}
+    </span>
+  </span>
+);
+
+const renderInlineWithReferenceImages = (
+  text: string,
+  referenceImages: ReferenceImageAsset[],
+  renderText: (value: string, keyPrefix: string) => ReactNode,
+  keyPrefix: string
+) => {
+  referenceImageTagPattern.lastIndex = 0;
+  if (referenceImages.length === 0 || !referenceImageTagPattern.test(text)) {
+    referenceImageTagPattern.lastIndex = 0;
+    return renderText(text, keyPrefix);
+  }
+  referenceImageTagPattern.lastIndex = 0;
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = referenceImageTagPattern.exec(text))) {
+    const [raw, , bracketId, xmlId] = match;
+    const id = bracketId ?? xmlId;
+    if (match.index > cursor) {
+      nodes.push(<Fragment key={`${keyPrefix}-text-${cursor}`}>{renderText(text.slice(cursor, match.index), `${keyPrefix}-text-${cursor}`)}</Fragment>);
+    }
+    const image = referenceImages.find((item) => item.id === id);
+    if (image) {
+      nodes.push(<ReferenceImage image={image} key={`${keyPrefix}-image-${id}-${match.index}`} />);
+    }
+    cursor = match.index + raw.length;
+  }
+  if (cursor < text.length) {
+    nodes.push(<Fragment key={`${keyPrefix}-text-${cursor}`}>{renderText(text.slice(cursor), `${keyPrefix}-text-${cursor}`)}</Fragment>);
+  }
+  return <>{nodes}</>;
+};
+
 const renderInlineAnswerWithTerms = (
   text: string,
   terms: Explanation[],
@@ -99,7 +145,8 @@ const renderInlineAnswerWithTerms = (
   openExplanation: (term: string) => void,
   inlineConversationMarkers: InlineConversationMarkerBinding[] = [],
   openInlineConversation: (conversation: InlineConversation) => void = () => {},
-  renderInlineConversationMarker: RenderInlineConversationMarker = () => null
+  renderInlineConversationMarker: RenderInlineConversationMarker = () => null,
+  referenceImages: ReferenceImageAsset[] = []
 ) => {
   const sortedInlineMarkers = inlineConversationMarkers
     .filter((marker) => typeof marker.offset !== "number" && marker.anchorText && text.includes(marker.anchorText))
@@ -132,7 +179,7 @@ const renderInlineAnswerWithTerms = (
   const renderSegments = (value: string, keyPrefix: string, renderSegment: (segment: string, key: string) => ReactNode) =>
     parseBoldSegments(value).map((segment, segmentIndex) => {
       const key = `${keyPrefix}-bold-${segmentIndex}`;
-      const content = renderSegment(segment.text, key);
+      const content = renderInlineWithReferenceImages(segment.text, referenceImages, renderSegment, key);
       return segment.bold ? <strong key={key}>{content}</strong> : <span key={key}>{content}</span>;
     });
   const sortedTerms = terms
@@ -172,7 +219,8 @@ export const renderAnswerText = (
   openExplanation: (term: string) => void = () => {},
   inlineConversationMarkers: InlineConversationMarkerBinding[] = [],
   openInlineConversation: (conversation: InlineConversation) => void = () => {},
-  renderInlineConversationMarker: RenderInlineConversationMarker = () => null
+  renderInlineConversationMarker: RenderInlineConversationMarker = () => null,
+  referenceImages: ReferenceImageAsset[] = []
 ) => {
   const textBoundTerms = bindExplanationsToAnswerText(text, terms);
   const blocks = parseAnswerBlocks(text);
@@ -251,7 +299,8 @@ export const renderAnswerText = (
                       openExplanation,
                       inlineConversationMarkers,
                       openInlineConversation,
-                      renderInlineConversationMarker
+                      renderInlineConversationMarker,
+                      referenceImages
                     )}
                   </th>
                 ))}
@@ -269,7 +318,8 @@ export const renderAnswerText = (
                         openExplanation,
                         inlineConversationMarkers,
                         openInlineConversation,
-                        renderInlineConversationMarker
+                        renderInlineConversationMarker,
+                        referenceImages
                       )}
                     </td>
                   ))}
@@ -305,7 +355,8 @@ export const renderAnswerText = (
                   openExplanation,
                   lineMarkers,
                   openInlineConversation,
-                  renderInlineConversationMarker
+                  renderInlineConversationMarker,
+                  referenceImages
                 )}
                 {renderLineEndMarkers(lineMarkers, `list-${listItemIndex}`)}
               </>
@@ -327,7 +378,8 @@ export const renderAnswerText = (
                 openExplanation,
                 lineMarkers,
                 openInlineConversation,
-                renderInlineConversationMarker
+                renderInlineConversationMarker,
+                referenceImages
               )}
               {renderLineEndMarkers(lineMarkers, `list-cont-${listItems.length}`)}
             </>
@@ -345,7 +397,8 @@ export const renderAnswerText = (
             openExplanation,
             lineMarkers,
             openInlineConversation,
-            renderInlineConversationMarker
+            renderInlineConversationMarker,
+            referenceImages
           );
           if (level === 1) {
             elements.push(<h1 key={`h1-${elements.length}`}>{content}</h1>);
@@ -367,7 +420,8 @@ export const renderAnswerText = (
               openExplanation,
               lineMarkers,
               openInlineConversation,
-              renderInlineConversationMarker
+              renderInlineConversationMarker,
+              referenceImages
             )}
             {renderLineEndMarkers(lineMarkers, `p-${elements.length}`)}
           </p>
@@ -385,7 +439,8 @@ export const renderAnswerWithInlineConversations = (
   annotationsRevealed: boolean,
   openExplanation: (term: string) => void,
   openInlineConversation: (conversation: InlineConversation) => void,
-  renderInlineConversationMarker: RenderInlineConversationMarker
+  renderInlineConversationMarker: RenderInlineConversationMarker,
+  referenceImages: ReferenceImageAsset[] = []
 ) => {
   const anchoredItems = inlineItems
     .map((conversation, index) => {
@@ -408,6 +463,7 @@ export const renderAnswerWithInlineConversations = (
     openExplanation,
     anchoredItems,
     openInlineConversation,
-    renderInlineConversationMarker
+    renderInlineConversationMarker,
+    referenceImages
   );
 };

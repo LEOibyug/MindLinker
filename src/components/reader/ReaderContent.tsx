@@ -3,6 +3,7 @@ import { renderAnswerText, renderAnswerWithInlineConversations } from "./answerR
 import type { ConversationDraft } from "../../domain/conversationDrafts";
 import type { ConversationKnowledgeGraph, ReferenceChangePlan } from "../../domain/types";
 import type { Explanation } from "../../domain/explanations";
+import type { ParsedReferenceDocument } from "../../services/pdfReferences";
 import { GraphErrorBoundary } from "./GraphErrorBoundary";
 import type { InlineConversation } from "../../domain/inlineConversations";
 import { getInlineConversationAnchorText } from "../../domain/inlineConversations";
@@ -33,6 +34,7 @@ export type ReaderContentProps = {
   newConversationOpen: boolean;
   newConversationPanel: ReactNode;
   referencePlan: ReferenceChangePlan | null;
+  referenceDocuments: ParsedReferenceDocument[];
   renderedConversationExplanations: Explanation[];
   rewriteDraft: string | null;
   rewritePrompt: string;
@@ -76,6 +78,7 @@ export function ReaderContent({
   newConversationOpen,
   newConversationPanel,
   referencePlan,
+  referenceDocuments,
   renderedConversationExplanations,
   rewriteDraft,
   rewritePrompt,
@@ -110,6 +113,7 @@ export function ReaderContent({
   const fallbackInlineConversations = activeInlineConversations.filter((conversation) =>
     isFallbackInlineConversation(conversation, activeDraft)
   );
+  const referenceImages = referenceDocuments.flatMap((document) => document.images ?? []);
 
   return (
     <article className="answer-document" aria-label="回答正文" onContextMenu={onContextMenu}>
@@ -139,7 +143,8 @@ export function ReaderContent({
                 annotationsRevealed,
                 onExplanationOpen,
                 onInlineConversationOpen,
-                renderInlineConversationMarker
+                renderInlineConversationMarker,
+                referenceImages
               )}
             </>
           ) : activeDraft.modelStatus === "needs-configuration" || activeDraft.modelStatus === "failed" ? (

@@ -28,6 +28,7 @@ import {
 } from "./modelClient/transport";
 
 export {
+  buildChatInstructionText,
   buildProviderEndpoint,
   buildProviderHeaders,
   buildRewritePrompt,

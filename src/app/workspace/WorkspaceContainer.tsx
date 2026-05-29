@@ -322,6 +322,7 @@ export function WorkspaceContainer({
           newConversationOpen,
           newConversationPanel: renderNewConversationPanel(),
           referencePlan: activeReferencePlan,
+          referenceDocuments: projectDocuments,
           renderedConversationExplanations,
           rewriteDraft,
           rewritePrompt: rewriteDraft ? buildRewritePrompt(rewriteDraft) : "",

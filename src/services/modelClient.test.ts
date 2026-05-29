@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildProviderEndpoint,
   buildProviderHeaders,
+  buildChatInstructionText,
   extractStreamTextFromPayload,
   extractTextFromModelPayload,
   findChatModelConfig
@@ -94,5 +95,16 @@ describe("modelClient", () => {
     expect(extractStreamTextFromPayload({ choices: [{ delta: { content: "chat" } }] })).toBe("chat");
     expect(extractStreamTextFromPayload({ type: "response.output_text.delta", delta: "response" })).toBe("response");
     expect(extractStreamTextFromPayload({ part: { text: "part" } })).toBe("part");
+  });
+
+  it("instructs the main model to cite only parsed reference image assets", () => {
+    const prompt = buildChatInstructionText("balanced");
+
+    expect(prompt).toContain("<reference_image_protocol>");
+    expect(prompt).toContain("[[ref-image:图片ID]]");
+    expect(prompt).toContain('<ref-image id="图片ID" />');
+    expect(prompt).toContain("只有 <REFERENCE_IMAGE> 列出的图片可以被引用");
+    expect(prompt).toContain("不要引用 PDF 页面截图");
+    expect(prompt).toContain("<IMAGE FOR PAGE");
   });
 });

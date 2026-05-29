@@ -48,6 +48,7 @@ const buildProps = (overrides: Partial<ComponentProps<typeof WorkspaceView>> = {
     newConversationOpen: false,
     newConversationPanel: null,
     referencePlan: null,
+    referenceDocuments: [],
     renderedConversationExplanations: [],
     rewriteDraft: null,
     rewritePrompt: "",

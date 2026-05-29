@@ -12,6 +12,18 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Reference Image Citation Rendering
+
+- Added a reference image asset channel on parsed references so model replies can cite images with `[[ref-image:id]]` or `<ref-image id="id" />`.
+- Rendered cited reference image assets inside the reader and passed project reference images through the workspace reader boundary.
+- Added prompt protocol instructions that only `<REFERENCE_IMAGE>` assets may be cited; PDF page screenshots and `<IMAGE FOR PAGE: ...>` placeholders remain model inputs only, not citable images.
+- Added PDF reference tests for embedded image assets and reader tests for rendering image citations without leaking raw tags.
+- Verification:
+  - `npm test -- src/components/reader/answerRendering.test.tsx src/components/reader/ReaderContent.test.tsx src/app/workspace/WorkspaceView.test.tsx src/services/pdfReferences.test.ts src/services/modelClient.test.ts`
+  - `npx tsc --noEmit`
+  - `npm test`
+  - `npm run build`
+
 ### 2026-05-29 - Plain Text Reference Support
 
 - Added direct text parsing for Markdown/plain text references so `.md`, `.txt`, and other text-like uploads use their real file contents instead of a placeholder.

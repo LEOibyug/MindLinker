@@ -78,9 +78,17 @@ export const buildChatInstructionText = (answerMode: AnswerMode) => `${promptPro
 - 输出只包含给用户看的主回复正文。
 - 直接进入实质内容或合适的标题。
 - 使用自然 Markdown 与 LaTeX 组织正文。
+- 如需引用参考资料中的原始图片，只能使用参考上下文中列出的 <REFERENCE_IMAGE> id，并写成 [[ref-image:图片ID]] 或 <ref-image id="图片ID" />。
 </output_format>
 
 ${mathFormulaProtocol}
+
+<reference_image_protocol>
+- 只有 <REFERENCE_IMAGE> 列出的图片可以被引用。
+- 不要引用 PDF 页面截图、页面渲染图或 <IMAGE FOR PAGE: ...> 这类页面占位图。
+- 不要编造图片 id；没有合适图片时直接用文字说明。
+- 图片引用标签可以出现在回答的任意位置，应用会自动渲染对应图片。
+</reference_image_protocol>
 
 <answer_detail_protocol>
 ${answerModePrompts[answerMode].instruction}

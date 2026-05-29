@@ -75,6 +75,7 @@ const baseProps: ComponentProps<typeof ReaderContent> = {
   newConversationOpen: false,
   newConversationPanel: <div>新建对话输入栏</div>,
   referencePlan: null,
+  referenceDocuments: [],
   renderedConversationExplanations: explanations,
   rewriteDraft: null,
   rewritePrompt: "",
@@ -114,6 +115,44 @@ describe("ReaderContent", () => {
 
     await user.click(screen.getByRole("button", { name: "位置提问 1" }));
     expect(onInlineConversationOpen).toHaveBeenCalledWith(inlineConversation);
+  });
+
+  it("renders referenced images from parsed reference documents inside generated answers", () => {
+    render(
+      <ReaderContent
+        {...baseProps}
+        activeDraft={{
+          ...generatedDraft,
+          answerMarkdown: "图像证据：[[ref-image:doc-a-image-1]]"
+        }}
+        referenceDocuments={[
+          {
+            id: "doc-a",
+            title: "lecture.pdf",
+            kind: "pdf",
+            pageCount: 5,
+            status: "parsed",
+            version: "local:lecture.pdf:pages:5",
+            pages: [],
+            images: [
+              {
+                id: "doc-a-image-1",
+                documentId: "doc-a",
+                documentTitle: "lecture.pdf",
+                pageNumber: 2,
+                dataUrl: "data:image/png;base64,figure",
+                alt: "课程图示"
+              }
+            ],
+            diagnostics: []
+          }
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("img", { name: "课程图示" })).toHaveAttribute("src", "data:image/png;base64,figure");
+    expect(screen.getByText("lecture.pdf · p.2")).toBeInTheDocument();
+    expect(screen.queryByText("[[ref-image:doc-a-image-1]]")).not.toBeInTheDocument();
   });
 
   it("renders reference update and rewrite controls with callbacks", async () => {

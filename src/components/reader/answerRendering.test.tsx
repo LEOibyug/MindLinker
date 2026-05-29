@@ -3,6 +3,31 @@ import { describe, expect, it } from "vitest";
 import { renderAnswerText } from "./answerRendering";
 
 describe("answerRendering", () => {
+  it("renders model reference-image tags from parsed reference image assets", () => {
+    const answer = "如图所示：[[ref-image:lecture4-fig-2]] 信息熵曲线随后下降。";
+    const { container } = render(
+      <article>
+        {renderAnswerText(answer, [], false, undefined, [], undefined, undefined, [
+          {
+            id: "lecture4-fig-2",
+            documentId: "doc-lecture4",
+            documentTitle: "Lecture4.pdf",
+            pageNumber: 3,
+            dataUrl: "data:image/png;base64,figurebytes",
+            alt: "信息熵曲线"
+          }
+        ])}
+      </article>
+    );
+
+    expect(container).toHaveTextContent("如图所示：");
+    expect(container).toHaveTextContent("信息熵曲线随后下降。");
+    const image = screen.getByRole("img", { name: "信息熵曲线" });
+    expect(image).toHaveAttribute("src", "data:image/png;base64,figurebytes");
+    expect(screen.getByText("Lecture4.pdf · p.3")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("[[ref-image:lecture4-fig-2]]");
+  });
+
   it("renders markdown tables and normalizes math without leaking raw delimiters", () => {
     const answer = [
       "核心关系如下：",
