@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   normalizeStoredConversationDrafts,
   normalizeStoredInlineConversations,
@@ -28,6 +28,7 @@ import { useInlineConversationActions } from "./hooks/useInlineConversationActio
 import { useHomeProjectActions } from "./hooks/useHomeProjectActions";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { useAppDerivedState } from "./hooks/useAppDerivedState";
+import { useConversationStatusActions } from "./hooks/useConversationStatusActions";
 
 export function App() {
   const [appView, setAppView] = useState<"home" | "workspace">("home");
@@ -87,8 +88,6 @@ export function App() {
   const [projectTitles, setProjectTitles] = useState<Record<string, string>>(
     Object.fromEntries(localProjects.map((project) => [project.id, project.title]))
   );
-  const activeProjectIdRef = useRef(activeProjectId);
-  const activeConversationIdRef = useRef(activeConversationId);
   const homeReferenceRunIdRef = useRef(0);
   const homeReferencePromiseRef = useRef<Promise<ParsedReferenceDocument[]> | null>(null);
   const removedHomeReferenceKeysRef = useRef<Set<string>>(new Set());
@@ -148,11 +147,6 @@ export function App() {
     runningConversationIds
   });
   useEffect(() => {
-    activeProjectIdRef.current = activeProjectId;
-    activeConversationIdRef.current = activeConversationId;
-  }, [activeProjectId, activeConversationId]);
-
-  useEffect(() => {
     writeStoredValue("mindlinker.conversationDrafts", normalizeStoredConversationDrafts(conversationDrafts));
   }, []);
 
@@ -187,29 +181,12 @@ export function App() {
   const hasRestorableAnnotations = (conversationId: string, status: LearningProject["conversations"][number]["status"]) =>
     (conversationExplanations[conversationId] ?? []).length > 0 || status === "ready";
 
-  const isConversationVisible = (conversationId: string, projectId: string) =>
-    activeProjectIdRef.current === projectId && activeConversationIdRef.current === conversationId;
-
-  const setConversationStatus = (conversationId: string, status: LearningProject["conversations"][number]["status"]) => {
-    setLocalProjects((projects) =>
-      projects.map((project) => ({
-        ...project,
-        conversations: project.conversations.map((conversation) =>
-          conversation.id === conversationId ? { ...conversation, status } : conversation
-        )
-      }))
-    );
-  };
-
-  const markConversationRunning = (conversationId: string, status: "generating-content" | "generating-annotations") => {
-    setRunningConversationIds((ids) => (ids.includes(conversationId) ? ids : [...ids, conversationId]));
-    setConversationStatus(conversationId, status);
-  };
-
-  const markConversationSettled = (conversationId: string, status: "idle" | "ready") => {
-    setRunningConversationIds((ids) => ids.filter((id) => id !== conversationId));
-    setConversationStatus(conversationId, status);
-  };
+  const { isConversationVisible, markConversationRunning, markConversationSettled } = useConversationStatusActions({
+    activeConversationId,
+    activeProjectId,
+    setLocalProjects,
+    setRunningConversationIds
+  });
 
   const { generateConversation, generateExplanationsForConversation } = useConversationGeneration({
     activeConversationId: activeConversation.id,

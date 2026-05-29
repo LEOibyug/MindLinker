@@ -12,6 +12,18 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Conversation Status Hook Refactor
+
+- Extracted visible-conversation checks and conversation running/settled status updates from `App.tsx` into `app/hooks/useConversationStatusActions.ts`.
+- Kept the hook narrowly scoped to generation background-state bookkeeping used by `useConversationGeneration`.
+- Added a hook test for visible conversation checks, running id deduplication, status updates, and settled cleanup.
+- Reduced `App.tsx` from roughly 578 lines to roughly 555 lines.
+- Verification:
+  - `npm test -- --run src/app/hooks/useConversationStatusActions.test.tsx src/app/hooks/useConversationGeneration.test.tsx`
+  - `npm test -- --run src/app/App.test.tsx -t "background|正在生成|streams|streaming|generated answer|new conversation|新建对话"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Settings Container Refactor
 
 - Extracted settings-page prop assembly and return-view handling from `App.tsx` into `app/settings/SettingsContainer.tsx`.
