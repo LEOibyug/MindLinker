@@ -12,6 +12,21 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Text Fence Rendering Cleanup
+
+- Fixed model answers that use ` ```text ` or other plain-text code fences for examples such as IP addresses and CIDR notation.
+- Plain text fences now render as normal answer text without leaking backticks or the `text` language marker.
+- Inline malformed plain-text fence prefixes such as `说明：```text 255.255.224.0` are cleaned before rendering.
+- Kept math/LaTeX fences on the existing formula-rendering path.
+- Regression coverage:
+  - parser strips plain-text fences without treating contents as formulas;
+  - renderer does not leak fence markers or create formula/model-state panels for text examples.
+- Verification:
+  - `npm test -- --run src/components/reader/answerParsing.test.ts src/components/reader/answerRendering.test.tsx`
+  - `npx tsc --noEmit`
+  - `npm test -- --run`
+  - `npm run build`
+
 ### 2026-05-29 - Tool-Aware Generation Progress
 
 - Increased the generation hint rotation cadence so long waits feel less static.

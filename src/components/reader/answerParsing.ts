@@ -3,6 +3,8 @@ export type AnswerBlock =
   | { kind: "formula"; text: string }
   | { kind: "table"; rows: string[][] };
 
+type FenceMode = "formula" | "text" | null;
+
 const stripFormulaWrapperQuotes = (value: string) =>
   value
     .trim()
@@ -57,6 +59,22 @@ export const isMarkdownListLine = (line: string) => /^[-*]\s+\S/.test(line.trim(
 const looksLikeExplanatoryText = (line: string) => /[\u4e00-\u9fff]{2,}|[，。；：、]/.test(line);
 
 const stripMarkdownQuotePrefix = (line: string) => line.replace(/^\s*>\s?/, "");
+
+const getFenceMode = (line: string): FenceMode | "close" => {
+  const trimmed = line.trim();
+  if (trimmed === "```") {
+    return "close";
+  }
+  const match = trimmed.match(/^```([A-Za-z0-9_-]+)?\s*$/);
+  if (!match) {
+    return null;
+  }
+  const language = (match[1] ?? "").toLocaleLowerCase();
+  return ["math", "latex", "tex"].includes(language) ? "formula" : "text";
+};
+
+const stripInlineTextFencePrefix = (line: string) =>
+  line.replace(/```(?:text|txt|plain|md|markdown)\s+/gi, "").replace(/\s*```\s*$/, "");
 
 const isStandaloneMathLine = (line: string) => {
   if (line.includes("$$") || line.includes("\\$")) {
@@ -123,8 +141,9 @@ export const parseAnswerBlocks = (text: string): AnswerBlock[] => {
   const blocks: AnswerBlock[] = [];
   const paragraphLines: string[] = [];
   let formulaLines: string[] = [];
+  let fencedTextLines: string[] = [];
   let tableRows: string[][] = [];
-  let inFormula = false;
+  let fenceMode: FenceMode = null;
 
   const flushParagraph = () => {
     if (paragraphLines.length === 0 || !paragraphLines.some((line) => line.trim())) {
@@ -143,6 +162,13 @@ export const parseAnswerBlocks = (text: string): AnswerBlock[] => {
     formulaLines = [];
   };
 
+  const flushFencedText = () => {
+    if (fencedTextLines.length > 0) {
+      blocks.push({ kind: "text", text: fencedTextLines.join("\n") });
+    }
+    fencedTextLines = [];
+  };
+
   const flushTable = () => {
     if (tableRows.length > 0) {
       blocks.push({ kind: "table", rows: tableRows });
@@ -153,25 +179,30 @@ export const parseAnswerBlocks = (text: string): AnswerBlock[] => {
   lines.forEach((rawLine) => {
     const line = stripMarkdownQuotePrefix(rawLine);
     const trimmed = line.trim();
-    if (/^```(?:math|latex|tex)?\s*$/i.test(trimmed)) {
+    const fence = getFenceMode(trimmed);
+    if (fence) {
       flushTable();
-      if (inFormula) {
+      if (fenceMode === "formula") {
         flushFormula();
-        inFormula = false;
+        fenceMode = null;
+      } else if (fenceMode === "text") {
+        flushFencedText();
+        fenceMode = null;
       } else {
         flushParagraph();
-        inFormula = true;
+        fenceMode = fence === "close" ? null : fence;
       }
       return;
     }
+    const lineWithoutInlineTextFence = stripInlineTextFencePrefix(line);
     if (trimmed === "$$" || trimmed === "\\[" || trimmed === "\\]") {
       flushTable();
-      if (inFormula) {
+      if (fenceMode === "formula") {
         flushFormula();
-        inFormula = false;
+        fenceMode = null;
       } else {
         flushParagraph();
-        inFormula = true;
+        fenceMode = "formula";
       }
       return;
     }
@@ -187,28 +218,34 @@ export const parseAnswerBlocks = (text: string): AnswerBlock[] => {
       blocks.push({ kind: "formula", text: normalizeMathExpression(trimmed.slice(2, -2)) });
       return;
     }
-    if (!inFormula && isMarkdownTableRow(line)) {
+    if (!fenceMode && isMarkdownTableRow(lineWithoutInlineTextFence)) {
       flushParagraph();
-      if (!isMarkdownTableSeparatorRow(line)) {
-        tableRows.push(parseMarkdownTableRow(line));
+      if (!isMarkdownTableSeparatorRow(lineWithoutInlineTextFence)) {
+        tableRows.push(parseMarkdownTableRow(lineWithoutInlineTextFence));
       }
       return;
     }
     flushTable();
-    if (!inFormula && !/^\s+\S/.test(rawLine) && isStandaloneMathLine(line)) {
+    if (!fenceMode && !/^\s+\S/.test(rawLine) && isStandaloneMathLine(lineWithoutInlineTextFence)) {
       flushParagraph();
-      blocks.push({ kind: "formula", text: normalizeMathLine(line) });
+      blocks.push({ kind: "formula", text: normalizeMathLine(lineWithoutInlineTextFence) });
       return;
     }
-    if (inFormula) {
-      formulaLines.push(line);
+    if (fenceMode === "formula") {
+      formulaLines.push(lineWithoutInlineTextFence);
       return;
     }
-    paragraphLines.push(line);
+    if (fenceMode === "text") {
+      fencedTextLines.push(lineWithoutInlineTextFence);
+      return;
+    }
+    paragraphLines.push(lineWithoutInlineTextFence);
   });
 
-  if (inFormula) {
+  if (fenceMode === "formula") {
     flushFormula();
+  } else if (fenceMode === "text") {
+    flushFencedText();
   }
   flushTable();
   flushParagraph();

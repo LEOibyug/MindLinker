@@ -59,4 +59,32 @@ describe("answerRendering", () => {
     expect(formula?.querySelector(".mfrac")).toBeInTheDocument();
     expect(container).not.toHaveTextContent("$$");
   });
+
+  it("renders text fences as normal prose without leaking fence markers or warning blocks", () => {
+    const answer = [
+      "IPv4 地址长度为 32 位，例如：",
+      "",
+      "```text",
+      "192.168.1.1",
+      "```",
+      "",
+      "对应十进制就是：```text 255.255.224.0",
+      "",
+      "CIDR 地址格式为：",
+      "",
+      "```text",
+      "a.b.c.d/x",
+      "```"
+    ].join("\n");
+
+    const { container } = render(<article>{renderAnswerText(answer)}</article>);
+
+    expect(container).toHaveTextContent("192.168.1.1");
+    expect(container).toHaveTextContent("对应十进制就是：255.255.224.0");
+    expect(container).toHaveTextContent("a.b.c.d/x");
+    expect(container).not.toHaveTextContent("```");
+    expect(container).not.toHaveTextContent("text 255");
+    expect(container.querySelector(".formula-block")).not.toBeInTheDocument();
+    expect(container.querySelector(".model-state-panel")).not.toBeInTheDocument();
+  });
 });

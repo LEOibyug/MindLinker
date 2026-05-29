@@ -34,4 +34,29 @@ describe("answerParsing", () => {
   it("normalizes standalone formulas into LaTeX-friendly fractions", () => {
     expect(normalizeMathExpression("\"log(a_i/b_i) + 1/p(x)\"")).toBe("\\log(\\frac{a_i}{b_i}) + \\frac{1}{p(x)}");
   });
+
+  it("strips text code fences without treating their contents as formulas", () => {
+    const answer = [
+      "IPv4 地址例如：",
+      "",
+      "```text",
+      "192.168.1.1",
+      "```",
+      "",
+      "对应十进制就是：```text 255.255.224.0",
+      "",
+      "CIDR 地址格式为：",
+      "",
+      "```text",
+      "a.b.c.d/x",
+      "```"
+    ].join("\n");
+
+    expect(parseAnswerBlocks(answer)).toEqual([
+      { kind: "text", text: "IPv4 地址例如：\n" },
+      { kind: "text", text: "192.168.1.1" },
+      { kind: "text", text: "\n对应十进制就是：255.255.224.0\n\nCIDR 地址格式为：\n" },
+      { kind: "text", text: "a.b.c.d/x" }
+    ]);
+  });
 });
