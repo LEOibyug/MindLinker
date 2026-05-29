@@ -15,11 +15,11 @@ import type {
 import type { ParsedReferenceDocument } from "../services/pdfReferences";
 import { getActiveProviderId } from "../services/providerSettings";
 import { appendRuntimeLog } from "../services/runtimeLog";
-import { SettingsPage } from "../components/panels/SettingsPage";
 import { usePersistentState, writeStoredValue } from "../services/persistentState";
 import type { ReaderContextMenuState } from "../components/reader/readerInteraction";
 import { AppChrome } from "./chrome/AppChrome";
 import { HomeContainer } from "./home/HomeContainer";
+import { SettingsContainer } from "./settings/SettingsContainer";
 import { WorkspaceContainer } from "./workspace/WorkspaceContainer";
 import { useConversationGeneration } from "./hooks/useConversationGeneration";
 import { useProviderSettingsActions } from "./hooks/useProviderSettingsActions";
@@ -425,28 +425,27 @@ export function App() {
   });
 
   const renderSettingsPage = () => (
-    <SettingsPage
+    <SettingsContainer
       activeProviderId={activeProviderId}
       embeddingApiKey={embeddingApiKey}
       embeddingEndpoint={embeddingEndpoint}
       providers={customProviders}
       ragEnabled={ragEnabled}
+      returnView={settingsReturnView}
       onAddProvider={addProvider}
       onAddProviderModel={addProviderModel}
-      onBack={() => {
-        setSettingsOpen(false);
-        setAppView(settingsReturnView);
-      }}
       onDeleteProvider={deleteProvider}
       onDeleteProviderModel={deleteProviderModel}
       onSetActiveProvider={setActiveProviderId}
       onSetEmbeddingApiKey={setEmbeddingApiKey}
       onSetEmbeddingEndpoint={setEmbeddingEndpoint}
       onSetRagEnabled={setRagEnabled}
-      onTestProvider={(provider) => void testProviderConnection(provider)}
-      onTestProviderModel={(provider, model) => void testProviderModel(provider, model)}
+      onTestProvider={testProviderConnection}
+      onTestProviderModel={testProviderModel}
       onUpdateProvider={updateProvider}
       onUpdateProviderModel={updateProviderModel}
+      setAppView={setAppView}
+      setSettingsOpen={setSettingsOpen}
     />
   );
 

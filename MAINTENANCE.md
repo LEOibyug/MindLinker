@@ -12,6 +12,15 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Settings Container Refactor
+
+- Extracted settings-page prop assembly and return-view handling from `App.tsx` into `app/settings/SettingsContainer.tsx`.
+- Kept provider mutation/testing behavior in `useProviderSettingsActions` and presentational layout in `SettingsPage`; the new container only owns page wiring.
+- Verification:
+  - `npm test -- --run src/components/panels/SettingsPage.test.tsx src/app/App.test.tsx -t "Settings|设置|provider|供应商|model|模型|RAG|rag|active provider|测试"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Project Delete Action Refactor
 
 - Moved project deletion confirmation, cleanup, and next-project navigation from `App.tsx` into `app/hooks/useWorkspaceActions.ts`.
