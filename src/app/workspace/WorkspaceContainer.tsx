@@ -50,6 +50,7 @@ export type WorkspaceContainerProps = {
   newConversationAnswerMode: AnswerMode;
   newConversationOpen: boolean;
   newConversationPrompt: string;
+  notice: string | null;
   projectDocuments: ParsedReferenceDocument[];
   projectTitles: Record<string, string>;
   projectVectorStores: VectorStore[];
@@ -127,6 +128,7 @@ export function WorkspaceContainer({
   newConversationAnswerMode,
   newConversationOpen,
   newConversationPrompt,
+  notice,
   projectDocuments,
   projectTitles,
   projectVectorStores,
@@ -321,6 +323,7 @@ export function WorkspaceContainer({
           graphTitle: activeConversation.title,
           newConversationOpen,
           newConversationPanel: renderNewConversationPanel(),
+          notice,
           referencePlan: activeReferencePlan,
           referenceDocuments: projectDocuments,
           renderedConversationExplanations,
@@ -369,6 +372,7 @@ export function WorkspaceContainer({
       {inlineConversationDraft ? (
         <InlineConversationDialog
           draft={inlineConversationDraft}
+          notice={notice}
           pending={inlineQuestionPending}
           onClose={() => setInlineConversationDraft(null)}
           onSend={(question) => void sendInlineQuestion(question)}

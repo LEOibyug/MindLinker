@@ -6,6 +6,7 @@ export type { InlineConversationDraft } from "../../domain/inlineConversations";
 
 type InlineConversationDialogProps = {
   draft: NonNullable<InlineConversationDraft>;
+  notice: string | null;
   pending: boolean;
   onClose: () => void;
   onSend: (question: string) => void;
@@ -32,7 +33,7 @@ export const renderInlineConversationMarker = (
   </button>
 );
 
-export const InlineConversationDialog = ({ draft, pending, onClose, onSend, onSave }: InlineConversationDialogProps) => {
+export const InlineConversationDialog = ({ draft, notice, pending, onClose, onSend, onSave }: InlineConversationDialogProps) => {
   const [question, setQuestion] = useState(draft.question);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -98,7 +99,7 @@ export const InlineConversationDialog = ({ draft, pending, onClose, onSend, onSa
           {pending ? (
             <div className="inline-thread-loading" role="status">
               <span className="loader-ring small-ring" aria-hidden="true" />
-              正在回答
+              {notice || "正在回答"}
             </div>
           ) : null}
         </div>

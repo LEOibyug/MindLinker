@@ -74,6 +74,7 @@ export function App() {
     }
   );
   const [notice, setNotice] = useState<string | null>(null);
+  const [generationHintIndex, setGenerationHintIndex] = useState(0);
   const [manualExplanationPending, setManualExplanationPending] = useState<string | null>(null);
   const [debugMessages, setDebugMessages] = useState<string[]>([]);
   const [fullRewriteApplied, setFullRewriteApplied] = useState(false);
@@ -172,6 +173,15 @@ export function App() {
     return () => window.clearTimeout(timeout);
   }, [generationPhase, notice]);
 
+  useEffect(() => {
+    if (generationPhase !== "content") {
+      setGenerationHintIndex(0);
+      return;
+    }
+    const interval = window.setInterval(() => setGenerationHintIndex((index) => index + 1), 2200);
+    return () => window.clearInterval(interval);
+  }, [generationPhase]);
+
   const logDebugMessage = (message: string) => {
     console.info(`[MindLinker] ${message}`);
     appendRuntimeLog("app", message);
@@ -215,6 +225,12 @@ export function App() {
     setVisibleConversationDrafts,
     logDebugMessage
   });
+
+  const generationHints = ["模型回复中", "阅读资料中", "我再仔细看看", "整理知识脉络中"];
+  const activeGenerationNotice =
+    generationPhase === "content" && (!notice || notice === "正在请求主模型")
+      ? generationHints[generationHintIndex % generationHints.length]
+      : notice;
 
   const {
     addProvider,
@@ -430,7 +446,7 @@ export function App() {
     return (
       <AppChrome
         className="home-shell"
-        notice={notice}
+        notice={activeGenerationNotice}
         subtitle="课程、理论与论文阅读"
         onDismissNotice={() => setNotice(null)}
         onOpenSettings={() => {
@@ -503,6 +519,7 @@ export function App() {
         newConversationAnswerMode={newConversationAnswerMode}
         newConversationOpen={newConversationOpen}
         newConversationPrompt={newConversationPrompt}
+        notice={notice}
         projectDocuments={projectDocuments}
         projectTitles={projectTitles}
         projectVectorStores={projectVectorStores}

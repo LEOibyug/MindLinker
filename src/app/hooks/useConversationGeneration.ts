@@ -10,7 +10,7 @@ import type { Explanation } from "../../domain/explanations";
 import { buildFallbackMarkedTerms } from "../../domain/knowledgeGraph";
 import {
   findChatModelConfig,
-  requestChatCompletion,
+  requestChatCompletionWithTools,
   requestExplainableTerms,
   requestExplanationChain,
   requestProjectTitle
@@ -172,7 +172,7 @@ export const useConversationGeneration = ({
         projectTitle: projectSnapshot?.title,
         conversationTitle: conversationSnapshot?.title ?? draft.title
       };
-      const answerPromise = requestChatCompletion(
+      const answerPromise = requestChatCompletionWithTools(
         draft.prompt,
         documents,
         chatConfig.provider,
@@ -200,6 +200,10 @@ export const useConversationGeneration = ({
           if (shouldUpdateVisibleConversation()) {
             setGenerationPhase("idle");
           }
+        },
+        (progressMessage) => {
+          setNotice(progressMessage);
+          logDebugMessage(progressMessage);
         },
         runtimeContext
       );

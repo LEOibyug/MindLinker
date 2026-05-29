@@ -4,6 +4,7 @@ import type { MarkedTerm } from "../../domain/explanations";
 import type { InlineConversation, InlineConversationMessage } from "../../domain/inlineConversations";
 import { buildReferenceContext } from "../pdfReferences";
 import type { ParsedReferenceDocument } from "../pdfReferences";
+import { buildReferenceToolMap } from "../referenceTools";
 
 export const promptProtocolHeader = "MindLinker Prompt Protocol v1";
 
@@ -98,6 +99,47 @@ ${answerModePrompts[answerMode].instruction}
 - 不要输出内部字段名、JSON、调试信息或 answer-xxx 标签。
 - 不要以“好的”、“当然”、“我是...助手”、“我将基于...”、“下面我将...”这类寒暄、自我介绍或任务复述开头。
 - 不要自我介绍，不要说明你会做什么。
+</prohibitions>`;
+
+export const buildReferencePlanningPrompt = (
+  prompt: string,
+  documents: ParsedReferenceDocument[]
+) => `${promptProtocolHeader}
+
+<task>参考资料读取规划</task>
+
+<instruction>
+请根据用户问题和参考地图，选择生成回答前最应该读取的页面和图片。目标是在保证回答正确性与覆盖面的同时，避免一次性读取过多内容。
+</instruction>
+
+<input>
+用户问题：
+${prompt}
+
+参考地图：
+${buildReferenceToolMap(documents) || "无"}
+</input>
+
+<tool_budget>
+- pages 最多选择 18 页。
+- images 最多选择 4 张。
+- 如果用户要求讲解整份材料，优先选择目录、总览、章节开头、关键定义/公式/图表页，而不是逐页全选。
+- 如果问题明显聚焦某一主题，优先选择主题相关页。
+</tool_budget>
+
+<json_output_protocol>
+{
+  "pages": [
+    {"documentId":"参考文档 id","pages":[1,2,3]}
+  ],
+  "images": ["REFERENCE_IMAGE id"]
+}
+</json_output_protocol>
+
+<prohibitions>
+- 只输出 JSON，不要输出解释。
+- 不要选择参考地图中不存在的 documentId、页码或图片 id。
+- 不要选择 PDF 页面截图或 <IMAGE FOR PAGE: ...> 占位图。
 </prohibitions>`;
 
 export const buildExplainableTermsPrompt = (

@@ -74,6 +74,7 @@ const baseProps: ComponentProps<typeof ReaderContent> = {
   graphTitle: "交叉熵为什么适合分类",
   newConversationOpen: false,
   newConversationPanel: <div>新建对话输入栏</div>,
+  notice: null,
   referencePlan: null,
   referenceDocuments: [],
   renderedConversationExplanations: explanations,

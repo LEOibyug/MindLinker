@@ -33,6 +33,7 @@ export type ReaderContentProps = {
   graphTitle: string;
   newConversationOpen: boolean;
   newConversationPanel: ReactNode;
+  notice: string | null;
   referencePlan: ReferenceChangePlan | null;
   referenceDocuments: ParsedReferenceDocument[];
   renderedConversationExplanations: Explanation[];
@@ -77,6 +78,7 @@ export function ReaderContent({
   graphTitle,
   newConversationOpen,
   newConversationPanel,
+  notice,
   referencePlan,
   referenceDocuments,
   renderedConversationExplanations,
@@ -122,7 +124,7 @@ export function ReaderContent({
           <div className="generation-card">
             <span className="loader-ring" />
             <strong>正在生成回答</strong>
-            <p>{activeDraft ? `已载入 ${activeDraft.referenceTitles.length} 份参考` : "正在准备上下文"}</p>
+            <p>{notice || (activeDraft ? `已载入 ${activeDraft.referenceTitles.length} 份参考` : "正在准备上下文")}</p>
           </div>
         </div>
       ) : null}

@@ -12,6 +12,22 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Reference Read Planning For Model Answers
+
+- Added a compact reference-map planning step before main-answer generation so the model first selects relevant pages and parsed reference images, then receives only the scoped context for the streamed answer.
+- Kept the no-reference path on the original single-call flow so ordinary chats do not pay an extra planning request.
+- Reused the same scoped-reference flow for inline position questions, including progress updates such as reading materials, reading figures, and model responding.
+- Updated the generation overlay to keep a stable title while showing the changing progress hint as supporting text.
+- Added fallback behavior when the planning request fails or returns no usable selection, with runtime logs recording the selected pages/images or fallback reason.
+- Regression coverage:
+  - reference maps do not embed full page text;
+  - JSON plans resolve selected pages/images under budget;
+  - main-answer requests are sent after reference planning and exclude unselected pages;
+  - reader and workspace props remain stable with dynamic progress notices.
+- Verification:
+  - `npm test -- --run`
+  - `npx tsc --noEmit`
+
 ### 2026-05-29 - Reference Image Citation Rendering
 
 - Added a reference image asset channel on parsed references so model replies can cite images with `[[ref-image:id]]` or `<ref-image id="id" />`.

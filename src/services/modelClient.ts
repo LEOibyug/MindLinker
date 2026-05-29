@@ -14,10 +14,13 @@ import {
   buildInlineConversationTitlePrompt,
   buildInlineQuestionPrompt,
   buildProjectTitlePrompt,
+  buildReferencePlanningPrompt,
   buildRewritePrompt,
   mathFormulaProtocol,
   promptProtocolHeader
 } from "./modelClient/protocol";
+import { parseReferencePlanJson, resolveReferencePlan } from "./referenceTools";
+import type { ReferenceToolPlan } from "./referenceTools";
 import {
   buildProviderEndpoint,
   buildProviderHeaders,
@@ -75,6 +78,48 @@ const readModelResponseText = async (
     }
   }
   return { text: extractTextFromModelPayload(await response.json()), transport: "json" as const };
+};
+
+export const requestReferencePlan = async (
+  prompt: string,
+  documents: ParsedReferenceDocument[],
+  provider: ProviderConfig,
+  model: ModelConfig,
+  runtimeContext: Record<string, unknown> = {}
+) => {
+  if (documents.length === 0) {
+    return { pages: [], images: [] } satisfies ReferenceToolPlan;
+  }
+  const endpoint = buildProviderEndpoint(provider);
+  const planningPrompt = buildReferencePlanningPrompt(prompt, documents);
+  appendRuntimeLog("model", "参考资料读取规划请求开始", {
+    ...runtimeContext,
+    provider: provider.name,
+    model: model.name,
+    apiFormat: provider.apiFormat,
+    endpoint,
+    documentCount: documents.length,
+    pageCount: documents.reduce((total, document) => total + document.pages.length, 0),
+    imageCount: documents.reduce((total, document) => total + (document.images?.length ?? 0), 0)
+  });
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: buildProviderHeaders(provider),
+    body: JSON.stringify(buildProviderRequestBody({ provider, model, prompt: planningPrompt }))
+  });
+  if (!response.ok) {
+    appendRuntimeLog("model", "参考资料读取规划请求失败", { ...runtimeContext, status: response.status, statusText: response.statusText }, "error");
+    throw new Error(`参考资料读取规划失败：${response.status} ${response.statusText}`);
+  }
+  const rawText = extractTextFromModelPayload(await response.json());
+  const plan = parseReferencePlanJson(rawText);
+  appendRuntimeLog("model", "参考资料读取规划完成", {
+    ...runtimeContext,
+    rawText,
+    selectedPageGroups: plan.pages.length,
+    selectedImageCount: plan.images.length
+  });
+  return plan;
 };
 
 export const requestChatCompletion = async (
@@ -165,6 +210,83 @@ export const requestChatCompletion = async (
   }
   appendRuntimeLog("model", "主模型响应为空", { ...runtimeContext }, "warn");
   throw new Error("模型响应中没有可显示的正文");
+};
+
+export const requestChatCompletionWithTools = async (
+  prompt: string,
+  documents: ParsedReferenceDocument[],
+  provider: ProviderConfig,
+  model: ModelConfig,
+  answerMode: AnswerMode = "balanced",
+  onDelta?: (text: string) => void,
+  onProgress?: (message: string) => void,
+  runtimeContext: Record<string, unknown> = {}
+) => {
+  if (documents.length === 0) {
+    onProgress?.("模型回复中");
+    return requestChatCompletion(prompt, documents, provider, model, answerMode, onDelta, runtimeContext);
+  }
+  onProgress?.("阅读资料中");
+  let scopedDocuments = documents;
+  try {
+    const plan = await requestReferencePlan(prompt, documents, provider, model, runtimeContext);
+    onProgress?.(plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");
+    const resolved = resolveReferencePlan(plan, documents);
+    if (resolved.documents.length > 0) {
+      scopedDocuments = resolved.documents;
+      appendRuntimeLog("model", "参考工具读取完成", {
+        ...runtimeContext,
+        selectedPageCount: resolved.selectedPageCount,
+        selectedImageCount: resolved.selectedImageCount,
+        selectedDocuments: scopedDocuments.map((document) => ({
+          id: document.id,
+          title: document.title,
+          pages: document.pages.map((page) => page.pageNumber),
+          images: document.images?.map((image) => image.id) ?? []
+        }))
+      });
+    } else {
+      const fallback = resolveReferencePlan(
+        {
+          pages: documents.map((document) => ({
+            documentId: document.id,
+            pages: document.pages.slice(0, 6).map((page) => page.pageNumber)
+          })),
+          images: documents.flatMap((document) => (document.images ?? []).slice(0, 1).map((image) => image.id))
+        },
+        documents
+      );
+      scopedDocuments = fallback.documents.length > 0 ? fallback.documents : documents.slice(0, 1);
+      appendRuntimeLog("model", "参考工具规划为空，使用预算内兜底上下文", {
+        ...runtimeContext,
+        selectedPageCount: fallback.selectedPageCount,
+        selectedImageCount: fallback.selectedImageCount
+      }, "warn");
+    }
+  } catch (error) {
+    const fallback = resolveReferencePlan(
+      {
+        pages: documents.map((document) => ({
+          documentId: document.id,
+          pages: document.pages.slice(0, 6).map((page) => page.pageNumber)
+        })),
+        images: documents.flatMap((document) => (document.images ?? []).slice(0, 1).map((image) => image.id))
+      },
+      documents
+    );
+    scopedDocuments = fallback.documents.length > 0 ? fallback.documents : documents.slice(0, 1);
+    appendRuntimeLog("model", "参考工具规划失败，使用预算内兜底上下文", {
+      ...runtimeContext,
+      message: error instanceof Error ? error.message : String(error),
+      selectedPageCount: fallback.selectedPageCount,
+      selectedImageCount: fallback.selectedImageCount
+    }, "warn");
+  }
+  onProgress?.("模型回复中");
+  return requestChatCompletion(prompt, scopedDocuments, provider, model, answerMode, onDelta, {
+    ...runtimeContext,
+    toolScopedReferenceCount: scopedDocuments.length
+  });
 };
 
 export const requestExplainableTerms = async (
@@ -332,10 +454,51 @@ export const requestInlineQuestionAnswer = async (
   messages: InlineConversationMessage[],
   provider: ProviderConfig,
   model: ModelConfig,
-  onDelta?: (text: string) => void
+  onDelta?: (text: string) => void,
+  onProgress?: (message: string) => void
 ) => {
   const endpoint = buildProviderEndpoint(provider);
-  const prompt = buildInlineQuestionPrompt(question, draft, documents, positionLabel, messages);
+  let scopedDocuments = documents;
+  onProgress?.(documents.length > 0 ? "阅读资料中" : "模型回复中");
+  try {
+    const plan = await requestReferencePlan(
+      `${draft?.prompt ?? ""}\n\n当前位置：${positionLabel}\n\n用户追问：${question}`,
+      documents,
+      provider,
+      model,
+      { question, positionLabel, reason: "inline-question" }
+    );
+    onProgress?.(plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");
+    const resolved = resolveReferencePlan(plan, documents, { maxPages: 10, maxImages: 2 });
+    scopedDocuments = resolved.documents.length > 0 ? resolved.documents : documents.slice(0, 1);
+    appendRuntimeLog("model", "位置提问参考工具读取完成", {
+      question,
+      positionLabel,
+      selectedPageCount: resolved.selectedPageCount,
+      selectedImageCount: resolved.selectedImageCount
+    });
+  } catch (error) {
+    const fallback = resolveReferencePlan(
+      {
+        pages: documents.map((document) => ({
+          documentId: document.id,
+          pages: document.pages.slice(0, 4).map((page) => page.pageNumber)
+        })),
+        images: []
+      },
+      documents,
+      { maxPages: 10, maxImages: 0 }
+    );
+    scopedDocuments = fallback.documents.length > 0 ? fallback.documents : documents.slice(0, 1);
+    appendRuntimeLog("model", "位置提问参考工具规划失败，使用预算内兜底上下文", {
+      question,
+      positionLabel,
+      message: error instanceof Error ? error.message : String(error),
+      selectedPageCount: fallback.selectedPageCount
+    }, "warn");
+  }
+  onProgress?.("模型回复中");
+  const prompt = buildInlineQuestionPrompt(question, draft, scopedDocuments, positionLabel, messages);
   appendRuntimeLog("model", "位置提问请求开始", {
     provider: provider.name,
     model: model.name,

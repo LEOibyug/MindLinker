@@ -47,6 +47,7 @@ const buildProps = (overrides: Partial<ComponentProps<typeof WorkspaceView>> = {
     graphTitle: "熵与互信息",
     newConversationOpen: false,
     newConversationPanel: null,
+    notice: null,
     referencePlan: null,
     referenceDocuments: [],
     renderedConversationExplanations: [],

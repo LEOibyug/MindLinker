@@ -1,13 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildProviderEndpoint,
   buildProviderHeaders,
   buildChatInstructionText,
   extractStreamTextFromPayload,
   extractTextFromModelPayload,
-  findChatModelConfig
+  findChatModelConfig,
+  requestChatCompletionWithTools
 } from "./modelClient";
 import type { ProviderConfig } from "../domain/types";
+import type { ParsedReferenceDocument } from "./pdfReferences";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const providers: ProviderConfig[] = [
   {
@@ -106,5 +112,44 @@ describe("modelClient", () => {
     expect(prompt).toContain("只有 <REFERENCE_IMAGE> 列出的图片可以被引用");
     expect(prompt).toContain("不要引用 PDF 页面截图");
     expect(prompt).toContain("<IMAGE FOR PAGE");
+  });
+
+  it("plans reference reads before sending a scoped main-answer request", async () => {
+    const document: ParsedReferenceDocument = {
+      id: "doc-a",
+      title: "Network.pdf",
+      kind: "pdf",
+      pageCount: 3,
+      status: "parsed",
+      version: "local:network",
+      pages: [
+        { pageNumber: 1, text: "overview page", textQuality: "good", needsImage: false },
+        { pageNumber: 2, text: "routing algorithm page", textQuality: "good", needsImage: false },
+        { pageNumber: 3, text: "unrelated appendix page", textQuality: "good", needsImage: false }
+      ],
+      diagnostics: []
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const body = JSON.stringify(JSON.parse(String(init?.body)));
+      if (body.includes("参考资料读取规划")) {
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: JSON.stringify({ pages: [{ documentId: "doc-a", pages: [2] }], images: [] }) } }]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      expect(body).toContain("routing algorithm page");
+      expect(body).not.toContain("unrelated appendix page");
+      return new Response(JSON.stringify({ choices: [{ message: { content: "主回答" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+
+    const answer = await requestChatCompletionWithTools("讲解路由算法", [document], providers[1], providers[1].models[0], "balanced");
+
+    expect(answer).toBe("主回答");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

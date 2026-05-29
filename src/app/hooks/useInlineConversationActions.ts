@@ -104,6 +104,7 @@ export const useInlineConversationActions = ({
     const nextMessages: InlineConversationMessage[] = [...previousMessages, { role: "user", content: question }];
     setInlineConversationDraft((draft) => (draft ? { ...draft, question: "", messages: [...nextMessages, { role: "assistant", content: "" }] } : draft));
     setInlineQuestionPending(true);
+    setNotice(projectDocuments.length > 0 ? "阅读资料中" : "模型回复中");
     try {
       const answer = await requestInlineQuestionAnswer(
         question,
@@ -122,6 +123,10 @@ export const useInlineConversationActions = ({
                 }
               : draft
           );
+        },
+        (progressMessage) => {
+          setNotice(progressMessage);
+          logDebugMessage(progressMessage);
         }
       );
       setInlineConversationDraft((draft) =>
