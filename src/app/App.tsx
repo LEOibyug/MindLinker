@@ -13,33 +13,25 @@ import {
 import type { LearningProject, ProviderConfig, VectorStore } from "../domain/types";
 import type { ConversationKnowledgeGraph } from "../domain/types";
 import type { Explanation } from "../domain/explanations";
-import { bindExplanationsToAnswerText, getExplanationAnchorTerm, normalizeTermForMatch } from "../domain/explanations";
-import { InlineConversationDialog, renderInlineConversationMarker } from "../components/inline-conversation/InlineConversationUi";
-import { getInlineConversationTitle } from "../domain/inlineConversations";
+import { bindExplanationsToAnswerText } from "../domain/explanations";
 import type {
   InlineConversation,
   InlineConversationDraft,
-  InlineConversationMarkerBinding,
 } from "../domain/inlineConversations";
-import { ExplanationPanel } from "../components/panels/ExplanationPanel";
 import { buildDraftKnowledgeGraph, buildProjectKnowledgeGraph } from "../domain/knowledgeGraph";
 import {
   buildProjectNavigationTarget,
   deleteProjectFromCollections,
 } from "../domain/projectLifecycle";
-import { buildRewritePrompt } from "../services/modelClient";
 import type { ParsedReferenceDocument } from "../services/pdfReferences";
 import { getActiveProviderId } from "../services/providerSettings";
 import { appendRuntimeLog } from "../services/runtimeLog";
 import { SettingsPage } from "../components/panels/SettingsPage";
-import { VectorStoreDialog } from "../components/panels/VectorStoreDialog";
 import { usePersistentState, writeStoredValue } from "../services/persistentState";
-import { buildReaderContextMenuState } from "../components/reader/readerInteraction";
 import type { ReaderContextMenuState } from "../components/reader/readerInteraction";
-import { NewConversationPanel } from "../components/home/NewConversationPanel";
 import { HomePage } from "../components/home/HomePage";
 import { AppChrome } from "./chrome/AppChrome";
-import { WorkspaceView } from "./workspace/WorkspaceView";
+import { WorkspaceContainer } from "./workspace/WorkspaceContainer";
 import { useConversationGeneration } from "./hooks/useConversationGeneration";
 import { useProviderSettingsActions } from "./hooks/useProviderSettingsActions";
 import { useExplanationActions } from "./hooks/useExplanationActions";
@@ -196,11 +188,6 @@ export function App() {
     () => bindExplanationsToAnswerText(activeDraft?.answerMarkdown ?? "", activeConversationExplanations),
     [activeDraft?.answerMarkdown, activeConversationExplanations]
   );
-  const getExplanationBodyTerms = (body: string, currentTerm: string) =>
-    bindExplanationsToAnswerText(
-      body,
-      activeConversationExplanations.filter((explanation) => explanation.term !== currentTerm)
-    );
   const activeReferencePlan = referencePlanId
     ? referenceChangePlans.find((plan) => plan.id === referencePlanId) ?? null
     : null;
@@ -527,76 +514,6 @@ export function App() {
     setNotice("已删除当前学习项目");
   };
 
-  const openExplanation = (term: string) => {
-    const normalizedTerm = normalizeTermForMatch(term);
-    const explanation = activeConversationExplanations.find(
-      (item) =>
-        getExplanationAnchorTerm(item) === term ||
-        item.term === term ||
-        normalizeTermForMatch(getExplanationAnchorTerm(item)) === normalizedTerm ||
-        normalizeTermForMatch(item.term) === normalizedTerm
-    );
-    if (!explanation) {
-      setNotice("该概念还没有模型生成的解释");
-      return;
-    }
-    setExplanationStack((stack) => [...stack.filter((item) => item.term !== term), explanation]);
-    setExplanationPanelMode("chain");
-  };
-
-  const previewExplanation = (term: string) => {
-    setExplanationStack((stack) => {
-      const target = stack.find((item) => item.term === term);
-      if (!target) {
-        return stack;
-      }
-      return [...stack.filter((item) => item.term !== term), target];
-    });
-  };
-
-  const openInlineConversationFromSummary = (conversation: InlineConversation) => {
-    openInlineConversation(conversation);
-  };
-
-  const openReaderMenu = (event: React.MouseEvent<HTMLElement>) => {
-    event.preventDefault();
-    setContextMenu(
-      buildReaderContextMenuState({
-        clientX: event.clientX,
-        clientY: event.clientY,
-        rootElement: event.currentTarget,
-        target: event.target,
-        fallbackMarkdown: activeDraft?.answerMarkdown ?? "",
-        explanations: availableExplanations
-      })
-    );
-  };
-
-  const renderNewConversationPanel = () =>
-    newConversationOpen ? (
-      <NewConversationPanel
-        answerMode={newConversationAnswerMode}
-        prompt={newConversationPrompt}
-        referenceCount={projectDocuments.length}
-        onAnswerModeChange={setNewConversationAnswerMode}
-        onCancel={() => {
-          setNewConversationOpen(false);
-          setNewConversationPrompt("");
-          setNewConversationAnswerMode("balanced");
-        }}
-        onPromptChange={setNewConversationPrompt}
-        onSubmit={() => createConversationInActiveProject(newConversationPrompt, newConversationAnswerMode)}
-      />
-    ) : null;
-
-  const createRewriteDraft = () => {
-    if (!contextMenu?.selectedText) {
-      return;
-    }
-    setRewriteDraft(contextMenu.selectedText);
-    setContextMenu(null);
-  };
-
   const renderSettingsPage = () => (
     <SettingsPage
       activeProviderId={activeProviderId}
@@ -668,145 +585,84 @@ export function App() {
       onOpenVectorStore={() => setVectorStoreOpen(true)}
       onShellClick={() => setContextMenu(null)}
     >
-      <WorkspaceView
+      <WorkspaceContainer
+        activeConversation={activeConversation}
+        activeConversationExplanations={activeConversationExplanations}
+        activeConversationRunning={activeConversationRunning}
+        activeDocumentIds={activeDocumentIds}
+        activeDraft={activeDraft}
+        activeInlineConversations={activeInlineConversations}
+        activeKnowledgeGraph={activeKnowledgeGraph}
+        activeKnowledgeGraphError={activeKnowledgeGraphResult.error}
+        activeProject={activeProject}
+        activeProjectTitle={activeProjectTitle}
+        activeReferencePlan={activeReferencePlan}
+        allDocuments={allDocuments}
+        annotationsRevealed={annotationsRevealed}
+        appliedPatch={appliedPatch}
+        confirmingConversationDeleteId={confirmingConversationDeleteId}
+        confirmingProjectDeleteId={confirmingProjectDeleteId}
+        confirmingReferenceDeleteId={confirmingReferenceDeleteId}
+        contextMenu={contextMenu}
+        editingTitle={editingTitle}
+        explanationPanelMode={explanationPanelMode}
+        fullRewriteApplied={fullRewriteApplied}
+        generationPhase={generationPhase}
+        inlineConversationDraft={inlineConversationDraft}
+        inlineQuestionPending={inlineQuestionPending}
+        localProjects={localProjects}
+        localVectorStores={localVectorStores}
+        manualExplanationPending={manualExplanationPending}
+        newConversationAnswerMode={newConversationAnswerMode}
+        newConversationOpen={newConversationOpen}
+        newConversationPrompt={newConversationPrompt}
+        projectDocuments={projectDocuments}
+        projectTitles={projectTitles}
+        projectVectorStores={projectVectorStores}
+        ragEnabled={ragEnabled}
+        renderedConversationExplanations={renderedConversationExplanations}
+        rewriteDraft={rewriteDraft}
+        runningConversationIds={runningConversationIds}
         settingsOpen={settingsOpen}
-        sidebarProps={{
-          activeConversationId: activeConversation.id,
-          activeDocumentIds,
-          activeProjectId: activeProject.id,
-          activeProjectTitle,
-          allDocuments,
-          confirmingConversationDeleteId,
-          confirmingProjectDeleteId,
-          confirmingReferenceDeleteId,
-          editingTitle,
-          projectTitles,
-          projects: localProjects,
-          runningConversationIds,
-          onCreateProject: createProject,
-          onDeleteConversation: deleteConversation,
-          onDeleteProject: deleteProject,
-          onDeleteReference: deleteProjectReference,
-          onIntroduceReference: introduceReference,
-          onNewConversation: () => {
-            setViewMode("reader");
-            setNewConversationOpen(true);
-          },
-          onEditProjectTitle: () => setEditingTitle(true),
-          onGenerateProjectTitle: () => {
-            setEditingTitle(true);
-            setProjectTitles((titles) => ({ ...titles, [activeProject.id]: "交叉熵与分布学习" }));
-          },
-          onSetProjectTitle: (title) =>
-            setProjectTitles((titles) => ({
-              ...titles,
-              [activeProject.id]: title
-            })),
-          onSwitchConversation: switchConversation,
-          onSwitchProject: switchProject,
-          onWorkspaceReferencesSelected: (files) => void addWorkspaceReferences(files)
-        }}
-        toolbarProps={{
-          canGenerateExplanations: viewMode === "reader" && activeDraft?.modelStatus === "generated" && Boolean(activeDraft.answerMarkdown.trim()),
-          generationDisabled: activeConversationRunning,
-          viewMode,
-          onGenerateExplanations: () => void generateExplanationsForConversation(),
-          onViewModeChange: setViewMode
-        }}
-        contentProps={{
-          activeDraft,
-          activeInlineConversations,
-          annotationsRevealed,
-          appliedPatch,
-          conversationTitle: activeConversation.title,
-          fullRewriteApplied,
-          generationPhase,
-          graph: activeKnowledgeGraph,
-          graphError: activeKnowledgeGraphResult.error,
-          graphTitle: activeConversation.title,
-          newConversationOpen,
-          newConversationPanel: renderNewConversationPanel(),
-          referencePlan: activeReferencePlan,
-          renderedConversationExplanations,
-          rewriteDraft,
-          rewritePrompt: rewriteDraft ? buildRewritePrompt(rewriteDraft) : "",
-          viewMode,
-          onApplyFullRewrite: applyFullRewrite,
-          onApplyReferencePatch: applyReferencePatch,
-          onContextMenu: openReaderMenu,
-          onExplanationOpen: openExplanation,
-          onGraphError: (error, info) => {
-            appendRuntimeLog(
-              "graph",
-              "知识图谱渲染失败",
-              {
-                message: error.message,
-                stack: error.stack,
-                componentStack: info.componentStack,
-                projectId: activeProject.id,
-                conversationId: activeConversation.id,
-                nodeCount: activeKnowledgeGraph.nodes.length,
-                edgeCount: activeKnowledgeGraph.edges.length
-              },
-              "error"
-            );
-          },
-          onInlineConversationOpen: openInlineConversation,
-          renderInlineConversationMarker
-        }}
-        contextMenuProps={
-          contextMenu
-            ? {
-                selectedText: contextMenu.selectedText,
-                x: contextMenu.x,
-                y: contextMenu.y,
-                onCreateManualExplanation: () => void createManualExplanation(),
-                onCreateRewriteDraft: createRewriteDraft,
-                onInsertInlineConversation: insertInlineConversation
-              }
-            : null
-        }
-        explanationPanelProps={{
-          activeInlineConversations,
-          explanations: activeConversationExplanations,
-          generationPhase,
-          manualExplanationPending,
-          mode: explanationPanelMode,
-          referencePlan: activeReferencePlan,
-          visibleStack,
-          getExplanationBodyTerms,
-          getInlineConversationTitle,
-          onContextMenu: openReaderMenu,
-          onExplanationOpen: openExplanation,
-          onInlineConversationOpen: openInlineConversationFromSummary,
-          onModeChange: setExplanationPanelMode,
-          onPreviewExplanation: previewExplanation,
-          onRewriteExplanation: (term) => void rewriteExplanation(term)
-        }}
+        vectorStoreOpen={vectorStoreOpen}
+        viewMode={viewMode}
+        visibleStack={visibleStack}
+        addWorkspaceReferences={addWorkspaceReferences}
+        applyFullRewrite={applyFullRewrite}
+        applyReferencePatch={applyReferencePatch}
+        clearVectorStore={clearVectorStore}
+        createManualExplanation={createManualExplanation}
+        createProject={createProject}
+        createConversationInActiveProject={createConversationInActiveProject}
+        deleteConversation={deleteConversation}
+        deleteProject={deleteProject}
+        deleteProjectReference={deleteProjectReference}
+        generateExplanationsForConversation={generateExplanationsForConversation}
+        introduceReference={introduceReference}
+        insertInlineConversation={insertInlineConversation}
+        openInlineConversation={openInlineConversation}
+        rebuildActiveVectorStore={rebuildActiveVectorStore}
+        rewriteExplanation={rewriteExplanation}
+        saveInlineConversationDraft={saveInlineConversationDraft}
+        sendInlineQuestion={sendInlineQuestion}
+        setContextMenu={setContextMenu}
+        setEditingTitle={setEditingTitle}
+        setExplanationPanelMode={setExplanationPanelMode}
+        setExplanationStack={setExplanationStack}
+        setInlineConversationDraft={setInlineConversationDraft}
+        setNewConversationAnswerMode={setNewConversationAnswerMode}
+        setNewConversationOpen={setNewConversationOpen}
+        setNewConversationPrompt={setNewConversationPrompt}
+        setNotice={setNotice}
+        setProjectTitles={setProjectTitles}
+        setRewriteDraft={setRewriteDraft}
+        setVectorStoreOpen={setVectorStoreOpen}
+        setViewMode={setViewMode}
+        switchConversation={switchConversation}
+        switchProject={switchProject}
       />
 
       {settingsOpen ? renderSettingsPage() : null}
-
-      {inlineConversationDraft ? (
-        <InlineConversationDialog
-          draft={inlineConversationDraft}
-          pending={inlineQuestionPending}
-          onClose={() => setInlineConversationDraft(null)}
-          onSend={(question) => void sendInlineQuestion(question)}
-          onSave={saveInlineConversationDraft}
-        />
-      ) : null}
-
-      {vectorStoreOpen ? (
-        <VectorStoreDialog
-          projectVectorStores={projectVectorStores}
-          ragEnabled={ragEnabled}
-          stores={localVectorStores}
-          onClearStore={clearVectorStore}
-          onClose={() => setVectorStoreOpen(false)}
-          onRebuildActiveStore={rebuildActiveVectorStore}
-        />
-      ) : null}
     </AppChrome>
   );
 }

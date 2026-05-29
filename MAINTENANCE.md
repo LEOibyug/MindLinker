@@ -12,6 +12,17 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Workspace Container Refactor
+
+- Extracted workspace UI orchestration from `App.tsx` into `app/workspace/WorkspaceContainer.tsx`.
+- Moved reader context-menu wiring, explanation stack opening/previewing, new-conversation panel composition, graph error logging, inline question dialog composition, vector-store dialog composition, and `WorkspaceView` prop assembly behind the workspace boundary.
+- Kept `App.tsx` responsible for top-level persisted state, active project/conversation selection, settings rendering, home rendering, and cross-feature hook ownership.
+- Reduced `App.tsx` from roughly 812 lines to roughly 668 lines.
+- Verification:
+  - `npm test -- --run src/app/workspace/WorkspaceView.test.tsx src/app/App.test.tsx -t "workspace|新建对话|自动解释关键词|位置提问|重写|删除项目|删除对话|删除参考|知识图谱|向量库|设置|home|主页"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Answer Parsing Boundary Refactor
 
 - Extracted Markdown block parsing, table parsing, standalone formula detection, and LaTeX normalization from `components/reader/answerRendering.tsx` into `components/reader/answerParsing.ts`.
