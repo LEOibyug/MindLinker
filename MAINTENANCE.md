@@ -12,6 +12,19 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Search Miss Prompt Guardrail
+
+- Clarified the reference search/tool prompts so the model treats empty search results as an extraction/search limitation, not proof that the references lack relevant content.
+- Reference planning now explicitly tells the model to keep selecting likely pages from the reference map, summaries, chapter hints, figures, or image-needed pages even when search hits are empty.
+- Search-term planning now states that search misses only mean the chosen keywords did not appear in extracted text.
+- Regression coverage:
+  - prompt builders include the search-miss limitation and fallback page-selection guidance.
+- Verification:
+  - `npm test -- --run src/services/modelClient.test.ts`
+  - `npx tsc --noEmit`
+  - `npm test -- --run`
+  - `npm run build`
+
 ### 2026-05-29 - Generated Title Persistence
 
 - Fixed a race where the title model could successfully update the project/conversation title, then the later main-answer completion wrote an older draft back over it.

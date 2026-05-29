@@ -8,6 +8,7 @@ import {
   findChatModelConfig,
   requestChatCompletionWithTools
 } from "./modelClient";
+import { buildReferencePlanningPrompt, buildReferenceSearchTermsPrompt } from "./modelClient/protocol";
 import type { ProviderConfig } from "../domain/types";
 import type { ParsedReferenceDocument } from "./pdfReferences";
 
@@ -112,6 +113,31 @@ describe("modelClient", () => {
     expect(prompt).toContain("只有 <REFERENCE_IMAGE> 列出的图片可以被引用");
     expect(prompt).toContain("不要引用 PDF 页面截图");
     expect(prompt).toContain("<IMAGE FOR PAGE");
+  });
+
+  it("tells reference planning that empty search results are not proof of missing content", () => {
+    const document: ParsedReferenceDocument = {
+      id: "scan",
+      title: "Scanned.pdf",
+      kind: "pdf",
+      pageCount: 2,
+      status: "parsed",
+      version: "local:scan",
+      pages: [
+        { pageNumber: 1, text: "", textQuality: "poor", needsImage: true },
+        { pageNumber: 2, text: "", textQuality: "poor", needsImage: true }
+      ],
+      diagnostics: []
+    };
+
+    const planningPrompt = buildReferencePlanningPrompt("讲解路由聚合", [document], "<NO_TEXT_SEARCH_HITS />");
+    expect(planningPrompt).toContain("没有搜索命中并不表示参考资料中没有相关内容");
+    expect(planningPrompt).toContain("不要把“没有搜索命中”解释为“资料没有相关内容”");
+    expect(planningPrompt).toContain("仍要依据参考地图、页面摘要、章节标题、图表页和页面图片需求选择可能相关的页面");
+
+    const searchPrompt = buildReferenceSearchTermsPrompt("讲解路由聚合", [document]);
+    expect(searchPrompt).toContain("搜索无命中只代表这些关键词没有在已提取文本中出现");
+    expect(searchPrompt).toContain("不代表参考资料没有相关内容");
   });
 
   it("plans reference reads before sending a scoped main-answer request", async () => {

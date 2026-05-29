@@ -111,6 +111,7 @@ export const buildReferencePlanningPrompt = (
 
 <instruction>
 请根据用户问题和参考地图，选择生成回答前最应该读取的页面和图片。目标是在保证回答正确性与覆盖面的同时，避免一次性读取过多内容。
+文本搜索结果只是一种辅助线索。没有搜索命中并不表示参考资料中没有相关内容，也不表示用户问题无法根据参考回答。
 </instruction>
 
 <input>
@@ -129,7 +130,15 @@ ${searchContext || "尚未执行文本搜索。"}
 - images 最多选择 4 张。
 - 如果用户要求讲解整份材料，优先选择目录、总览、章节开头、关键定义/公式/图表页，而不是逐页全选。
 - 如果问题明显聚焦某一主题，优先选择主题相关页。
+- 如果文本搜索没有命中，仍要依据参考地图、页面摘要、章节标题、图表页和页面图片需求选择可能相关的页面。
 </tool_budget>
+
+<search_result_limits>
+- <NO_TEXT_SEARCH_HITS /> 只表示当前关键词没有在已提取文本中命中。
+- <UNSEARCHABLE_PDF> 表示该 PDF 的文本可能不可检索，常见原因包括扫描件、图片型页面、OCR 缺失或复杂排版。
+- 不要把“没有搜索命中”解释为“资料没有相关内容”。
+- 不要因为搜索无命中而放弃选择页面；必要时选择概览页、目录页、章节开头、疑似相关页或需要图片理解的页面。
+</search_result_limits>
 
 <json_output_protocol>
 {
@@ -166,7 +175,7 @@ ${buildReferenceToolMap(documents) || "无"}
 </input>
 
 <tool_description>
-search_pdf_text 可在 PDF 已提取文本中检索多个关键词，并返回命中文本片段与页码标记。如果某个 PDF 没有可检索文本，工具会返回不可检索原因。
+search_pdf_text 可在 PDF 已提取文本中检索多个关键词，并返回命中文本片段与页码标记。如果某个 PDF 没有可检索文本，工具会返回不可检索原因。搜索无命中只代表这些关键词没有在已提取文本中出现，不代表参考资料没有相关内容。
 </tool_description>
 
 <json_output_protocol>
