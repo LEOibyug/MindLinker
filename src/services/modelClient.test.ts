@@ -154,10 +154,21 @@ describe("modelClient", () => {
         headers: { "Content-Type": "application/json" }
       });
     });
+    const progressMessages: string[] = [];
 
-    const answer = await requestChatCompletionWithTools("讲解路由算法", [document], providers[1], providers[1].models[0], "balanced");
+    const answer = await requestChatCompletionWithTools(
+      "讲解路由算法",
+      [document],
+      providers[1],
+      providers[1].models[0],
+      "balanced",
+      undefined,
+      (message) => progressMessages.push(message)
+    );
 
     expect(answer).toBe("主回答");
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(progressMessages).toContain("正在查找 routing");
+    expect(progressMessages).toContain("正在查看 Network.pdf 第 2 页");
   });
 });

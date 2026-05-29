@@ -170,10 +170,14 @@ const runReferenceTextSearchTool = async (
   documents: ParsedReferenceDocument[],
   provider: ProviderConfig,
   model: ModelConfig,
+  onProgress?: (message: string) => void,
   runtimeContext: Record<string, unknown> = {}
 ) => {
   try {
     const searchTerms = await requestReferenceSearchTerms(prompt, documents, provider, model, runtimeContext);
+    if (searchTerms.length > 0) {
+      onProgress?.(`正在查找 ${searchTerms.slice(0, 3).join("、")}`);
+    }
     const searchResult = searchReferenceText(documents, searchTerms);
     appendRuntimeLog("model", "参考文本搜索工具完成", {
       ...runtimeContext,
@@ -197,6 +201,16 @@ const runReferenceTextSearchTool = async (
     );
     return "";
   }
+};
+
+const summarizeSelectedPages = (documents: ParsedReferenceDocument[]) => {
+  const pageLabels = documents.flatMap((document) =>
+    document.pages.map((page) => `${document.title} 第 ${page.pageNumber} 页`)
+  );
+  if (pageLabels.length === 0) {
+    return "";
+  }
+  return `正在查看 ${pageLabels.slice(0, 3).join("、")}${pageLabels.length > 3 ? " 等" : ""}`;
 };
 
 export const requestChatCompletion = async (
@@ -306,7 +320,7 @@ export const requestChatCompletionWithTools = async (
   onProgress?.("阅读资料中");
   let scopedDocuments = documents;
   try {
-    const searchContext = await runReferenceTextSearchTool(prompt, documents, provider, model, runtimeContext);
+    const searchContext = await runReferenceTextSearchTool(prompt, documents, provider, model, onProgress, runtimeContext);
     const plan = await requestReferencePlan(
       prompt,
       documents,
@@ -319,6 +333,10 @@ export const requestChatCompletionWithTools = async (
     const resolved = resolveReferencePlan(plan, documents);
     if (resolved.documents.length > 0) {
       scopedDocuments = resolved.documents;
+      const selectedPageNotice = summarizeSelectedPages(scopedDocuments);
+      if (selectedPageNotice) {
+        onProgress?.(selectedPageNotice);
+      }
       appendRuntimeLog("model", "参考工具读取完成", {
         ...runtimeContext,
         selectedPageCount: resolved.selectedPageCount,
@@ -360,6 +378,10 @@ export const requestChatCompletionWithTools = async (
       documents
     );
     scopedDocuments = fallback.documents.length > 0 ? fallback.documents : documents.slice(0, 1);
+    const fallbackPageNotice = summarizeSelectedPages(scopedDocuments);
+    if (fallbackPageNotice) {
+      onProgress?.(fallbackPageNotice);
+    }
     appendRuntimeLog("model", "参考工具规划失败，使用预算内兜底上下文", {
       ...runtimeContext,
       message: error instanceof Error ? error.message : String(error),
@@ -552,6 +574,7 @@ export const requestInlineQuestionAnswer = async (
       documents,
       provider,
       model,
+      onProgress,
       { question, positionLabel, reason: "inline-question" }
     );
     const plan = await requestReferencePlan(
@@ -565,6 +588,10 @@ export const requestInlineQuestionAnswer = async (
     onProgress?.(plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");
     const resolved = resolveReferencePlan(plan, documents, { maxPages: 10, maxImages: 2 });
     scopedDocuments = resolved.documents.length > 0 ? resolved.documents : documents.slice(0, 1);
+    const selectedPageNotice = summarizeSelectedPages(scopedDocuments);
+    if (selectedPageNotice) {
+      onProgress?.(selectedPageNotice);
+    }
     appendRuntimeLog("model", "位置提问参考工具读取完成", {
       question,
       positionLabel,

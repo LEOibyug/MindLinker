@@ -178,7 +178,7 @@ export function App() {
       setGenerationHintIndex(0);
       return;
     }
-    const interval = window.setInterval(() => setGenerationHintIndex((index) => index + 1), 2200);
+    const interval = window.setInterval(() => setGenerationHintIndex((index) => index + 1), 1400);
     return () => window.clearInterval(interval);
   }, [generationPhase]);
 
@@ -226,7 +226,7 @@ export function App() {
     logDebugMessage
   });
 
-  const generationHints = ["模型回复中", "阅读资料中", "我再仔细看看", "整理知识脉络中"];
+  const generationHints = ["模型回复中", "阅读资料中", "我再仔细看看", "整理知识脉络中", "查找参考片段中"];
   const activeGenerationNotice =
     generationPhase === "content" && (!notice || notice === "正在请求主模型")
       ? generationHints[generationHintIndex % generationHints.length]

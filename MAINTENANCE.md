@@ -12,6 +12,21 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Tool-Aware Generation Progress
+
+- Increased the generation hint rotation cadence so long waits feel less static.
+- Added tool-aware progress updates for reference search and page selection:
+  - keyword search now reports the leading search terms;
+  - selected reference pages now report the first few document/page labels before the model answer request starts.
+- Applied the same progress path to inline position questions.
+- Regression coverage:
+  - main-answer generation reports both search-term and selected-page progress messages.
+- Verification:
+  - `npm test -- --run src/services/modelClient.test.ts`
+  - `npx tsc --noEmit`
+  - `npm test -- --run`
+  - `npm run build`
+
 ### 2026-05-29 - PDF Text Search Reference Tool
 
 - Added a local PDF text search tool that accepts multiple keywords and returns matching snippets with document titles and page markers.
