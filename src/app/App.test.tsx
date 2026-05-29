@@ -1232,18 +1232,21 @@ describe("MindLinker shell", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "项目 AEP 与典型集" })).toBeInTheDocument());
     expect(within(screen.getByRole("banner", { name: "MindLinker" })).getByText("AEP 与典型集")).toBeInTheDocument();
     expect(answerController).not.toBeNull();
-    expect(titleRequestBody).toContain("请根据这份课程 PPT 给我讲课");
-    expect(titleRequestBody).toContain("lecture-aep.md");
-    expect(titleRequestBody).toContain("MindLinker Prompt Protocol");
-    expect(titleRequestBody).toContain("<task>项目标题生成任务</task>");
-    expect(titleRequestBody).toContain("<input>");
-    expect(titleRequestBody).toContain("<output_format>");
-    expect(titleRequestBody).toContain("<prohibitions>");
-    expect(titleRequestBody).not.toContain("【任务】");
-    expect(titleRequestBody).toContain("参考材料摘要");
-    expect(titleRequestBody).toContain("<PARSED TEXT: lecture-aep.md>");
-    expect(titleRequestBody).not.toContain("本章解释 AEP 和典型集");
-    expect(titleRequestBody).not.toContain("已经生成的回答");
+    const titleRequestPrompt = JSON.parse(titleRequestBody).messages[0].content;
+    expect(titleRequestPrompt).toContain("请根据这份课程 PPT 给我讲课");
+    expect(titleRequestPrompt).toContain("lecture-aep.md");
+    expect(titleRequestPrompt).toContain("MindLinker Prompt Protocol");
+    expect(titleRequestPrompt).toContain("<task>项目标题生成任务</task>");
+    expect(titleRequestPrompt).toContain("<input>");
+    expect(titleRequestPrompt).toContain("<output_format>");
+    expect(titleRequestPrompt).toContain("<prohibitions>");
+    expect(titleRequestPrompt).not.toContain("【任务】");
+    expect(titleRequestPrompt).toContain("参考材料摘要");
+    expect(titleRequestPrompt).toContain('<REFERENCE title="lecture-aep.md" kind="text" pages="1">');
+    expect(titleRequestPrompt).toContain('<REFERENCE_TEXT title="lecture-aep.md">');
+    expect(titleRequestPrompt).toContain("典型集参考内容");
+    expect(titleRequestPrompt).not.toContain("本章解释 AEP 和典型集");
+    expect(titleRequestPrompt).not.toContain("已经生成的回答");
 
     await act(async () => {
       answerController?.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));

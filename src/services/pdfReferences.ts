@@ -68,6 +68,9 @@ const isBrowserRuntime = () => typeof window !== "undefined" && typeof document 
 
 const describeUnknownError = (error: unknown) => (error instanceof Error ? `${error.name}: ${error.message}` : String(error));
 
+const escapeXmlAttribute = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 const loadPdfDocument = async (file: File): Promise<PdfJsDocumentProxy> => {
   const pdfjs = isBrowserRuntime() ? await import("pdfjs-dist") : await import("pdfjs-dist/legacy/build/pdf.mjs");
   if (isBrowserRuntime() && "GlobalWorkerOptions" in pdfjs) {
@@ -229,6 +232,8 @@ export const parseReferenceFile = async (
     };
   }
 
+  const text = await file.text();
+
   return {
     id,
     title: file.name,
@@ -239,7 +244,7 @@ export const parseReferenceFile = async (
     pages: [
       {
         pageNumber: 1,
-        text: `<PARSED TEXT: ${file.name}>`,
+        text: `<REFERENCE_TEXT title="${escapeXmlAttribute(file.name)}">\n${text}\n</REFERENCE_TEXT>`,
         textQuality: "good",
         needsImage: false
       }
@@ -257,7 +262,8 @@ export const buildReferenceContext = (documents: ParsedReferenceDocument[]) =>
           return `<PAGE number="${page.pageNumber}" total="${document.pageCount}">\n${page.text}${imagePart}\n</PAGE>`;
         })
         .join("\n");
-      return `<PDF title="${document.title}" pages="${document.pageCount}">\n${pageBlocks}\n</PDF>`;
+      const tagName = document.kind === "pdf" ? "PDF" : "REFERENCE";
+      return `<${tagName} title="${escapeXmlAttribute(document.title)}" kind="${document.kind}" pages="${document.pageCount}">\n${pageBlocks}\n</${tagName}>`;
     })
     .join("\n\n");
 
@@ -266,7 +272,7 @@ export const buildOpenAIInputParts = (documents: ParsedReferenceDocument[]): Ope
     document.pages.flatMap((page) => {
       const textPart: OpenAIInputPart = {
         type: "input_text",
-        text: `<PDF title="${document.title}" page="${page.pageNumber}/${document.pageCount}">\n${page.text}\n</PDF>`
+        text: `<REFERENCE title="${escapeXmlAttribute(document.title)}" kind="${document.kind}" page="${page.pageNumber}/${document.pageCount}">\n${page.text}\n</REFERENCE>`
       };
       if (!page.imageDataUrl) {
         return [textPart];

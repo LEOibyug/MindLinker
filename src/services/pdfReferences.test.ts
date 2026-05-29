@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildOpenAIInputParts, parseReferenceFile } from "./pdfReferences";
+import { buildOpenAIInputParts, buildReferenceContext, parseReferenceFile } from "./pdfReferences";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -8,6 +8,35 @@ afterEach(() => {
 });
 
 describe("PDF reference processor", () => {
+  it("keeps markdown and plain text references as direct named text context", async () => {
+    const document = await parseReferenceFile(
+      new File(["# 第一章\n\n交叉熵用于衡量编码代价。"], "reading-notes.md", { type: "text/markdown" }),
+      "project-test",
+      0,
+      false
+    );
+    const parts = buildOpenAIInputParts([document]);
+    const context = buildReferenceContext([document]);
+
+    expect(document.kind).toBe("text");
+    expect(document.pageCount).toBe(1);
+    expect(document.pages[0].text).toContain('<REFERENCE_TEXT title="reading-notes.md">');
+    expect(document.pages[0].text).toContain("# 第一章");
+    expect(document.pages[0].text).toContain("交叉熵用于衡量编码代价。");
+    expect(context).toContain('<REFERENCE title="reading-notes.md" kind="text" pages="1">');
+    expect(context).not.toContain("<PDF");
+    expect(parts).toEqual([
+      {
+        type: "input_text",
+        text: expect.stringContaining('<REFERENCE title="reading-notes.md" kind="text" page="1/1">')
+      }
+    ]);
+    expect(parts[0]).toMatchObject({
+      type: "input_text",
+      text: expect.stringContaining("交叉熵用于衡量编码代价。")
+    });
+  });
+
   it("parses a local PDF with bundled JS dependencies and emits OpenAI image parts", async () => {
     const lecture = await readFile("/Users/rhetoric/Work/InfoTheory/哈工深-Lecture4-AEP-IDD.pdf");
     const document = await parseReferenceFile(

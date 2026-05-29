@@ -12,6 +12,16 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Plain Text Reference Support
+
+- Added direct text parsing for Markdown/plain text references so `.md`, `.txt`, and other text-like uploads use their real file contents instead of a placeholder.
+- Wrapped text references with the reference title in structured model context so the model can distinguish which local reference each text block came from.
+- Updated title-generation request coverage to verify text reference contents are included before the main answer returns.
+- Verification:
+  - `npm test -- src/services/pdfReferences.test.ts`
+  - `npm test`
+  - `npm run build`
+
 ### 2026-05-29 - Conversation Status Hook Refactor
 
 - Extracted visible-conversation checks and conversation running/settled status updates from `App.tsx` into `app/hooks/useConversationStatusActions.ts`.
