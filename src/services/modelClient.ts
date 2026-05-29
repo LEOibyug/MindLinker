@@ -15,11 +15,18 @@ import {
   buildInlineQuestionPrompt,
   buildProjectTitlePrompt,
   buildReferencePlanningPrompt,
+  buildReferenceSearchTermsPrompt,
   buildRewritePrompt,
   mathFormulaProtocol,
   promptProtocolHeader
 } from "./modelClient/protocol";
-import { parseReferencePlanJson, resolveReferencePlan } from "./referenceTools";
+import {
+  buildReferenceSearchContext,
+  parseReferencePlanJson,
+  parseReferenceSearchTermsJson,
+  resolveReferencePlan,
+  searchReferenceText
+} from "./referenceTools";
 import type { ReferenceToolPlan } from "./referenceTools";
 import {
   buildProviderEndpoint,
@@ -85,13 +92,14 @@ export const requestReferencePlan = async (
   documents: ParsedReferenceDocument[],
   provider: ProviderConfig,
   model: ModelConfig,
+  searchContext = "",
   runtimeContext: Record<string, unknown> = {}
 ) => {
   if (documents.length === 0) {
     return { pages: [], images: [] } satisfies ReferenceToolPlan;
   }
   const endpoint = buildProviderEndpoint(provider);
-  const planningPrompt = buildReferencePlanningPrompt(prompt, documents);
+  const planningPrompt = buildReferencePlanningPrompt(prompt, documents, searchContext);
   appendRuntimeLog("model", "参考资料读取规划请求开始", {
     ...runtimeContext,
     provider: provider.name,
@@ -120,6 +128,75 @@ export const requestReferencePlan = async (
     selectedImageCount: plan.images.length
   });
   return plan;
+};
+
+export const requestReferenceSearchTerms = async (
+  prompt: string,
+  documents: ParsedReferenceDocument[],
+  provider: ProviderConfig,
+  model: ModelConfig,
+  runtimeContext: Record<string, unknown> = {}
+) => {
+  if (documents.length === 0 || !documents.some((document) => document.kind === "pdf")) {
+    return [];
+  }
+  const endpoint = buildProviderEndpoint(provider);
+  const searchPrompt = buildReferenceSearchTermsPrompt(prompt, documents);
+  appendRuntimeLog("model", "参考文本搜索词请求开始", {
+    ...runtimeContext,
+    provider: provider.name,
+    model: model.name,
+    apiFormat: provider.apiFormat,
+    endpoint,
+    documentCount: documents.length
+  });
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: buildProviderHeaders(provider),
+    body: JSON.stringify(buildProviderRequestBody({ provider, model, prompt: searchPrompt }))
+  });
+  if (!response.ok) {
+    appendRuntimeLog("model", "参考文本搜索词请求失败", { ...runtimeContext, status: response.status, statusText: response.statusText }, "error");
+    throw new Error(`参考文本搜索词请求失败：${response.status} ${response.statusText}`);
+  }
+  const rawText = extractTextFromModelPayload(await response.json());
+  const terms = parseReferenceSearchTermsJson(rawText);
+  appendRuntimeLog("model", "参考文本搜索词解析完成", { ...runtimeContext, rawText, terms });
+  return terms;
+};
+
+const runReferenceTextSearchTool = async (
+  prompt: string,
+  documents: ParsedReferenceDocument[],
+  provider: ProviderConfig,
+  model: ModelConfig,
+  runtimeContext: Record<string, unknown> = {}
+) => {
+  try {
+    const searchTerms = await requestReferenceSearchTerms(prompt, documents, provider, model, runtimeContext);
+    const searchResult = searchReferenceText(documents, searchTerms);
+    appendRuntimeLog("model", "参考文本搜索工具完成", {
+      ...runtimeContext,
+      terms: searchTerms,
+      hitCount: searchResult.hits.length,
+      hits: searchResult.hits.map((hit) => ({
+        term: hit.term,
+        documentId: hit.documentId,
+        pageNumber: hit.pageNumber,
+        pageMarker: hit.pageMarker
+      })),
+      unavailableDocuments: searchResult.unavailableDocuments
+    });
+    return buildReferenceSearchContext(searchResult);
+  } catch (error) {
+    appendRuntimeLog(
+      "model",
+      "参考文本搜索工具失败，继续使用参考地图规划",
+      { ...runtimeContext, message: error instanceof Error ? error.message : String(error) },
+      "warn"
+    );
+    return "";
+  }
 };
 
 export const requestChatCompletion = async (
@@ -229,7 +306,15 @@ export const requestChatCompletionWithTools = async (
   onProgress?.("阅读资料中");
   let scopedDocuments = documents;
   try {
-    const plan = await requestReferencePlan(prompt, documents, provider, model, runtimeContext);
+    const searchContext = await runReferenceTextSearchTool(prompt, documents, provider, model, runtimeContext);
+    const plan = await requestReferencePlan(
+      prompt,
+      documents,
+      provider,
+      model,
+      searchContext,
+      runtimeContext
+    );
     onProgress?.(plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");
     const resolved = resolveReferencePlan(plan, documents);
     if (resolved.documents.length > 0) {
@@ -461,11 +546,20 @@ export const requestInlineQuestionAnswer = async (
   let scopedDocuments = documents;
   onProgress?.(documents.length > 0 ? "阅读资料中" : "模型回复中");
   try {
-    const plan = await requestReferencePlan(
-      `${draft?.prompt ?? ""}\n\n当前位置：${positionLabel}\n\n用户追问：${question}`,
+    const toolPrompt = `${draft?.prompt ?? ""}\n\n当前位置：${positionLabel}\n\n用户追问：${question}`;
+    const searchContext = await runReferenceTextSearchTool(
+      toolPrompt,
       documents,
       provider,
       model,
+      { question, positionLabel, reason: "inline-question" }
+    );
+    const plan = await requestReferencePlan(
+      toolPrompt,
+      documents,
+      provider,
+      model,
+      searchContext,
       { question, positionLabel, reason: "inline-question" }
     );
     onProgress?.(plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");

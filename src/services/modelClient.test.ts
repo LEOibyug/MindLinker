@@ -131,7 +131,15 @@ describe("modelClient", () => {
     };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
       const body = JSON.stringify(JSON.parse(String(init?.body)));
+      if (body.includes("参考文本搜索词规划")) {
+        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ terms: ["routing"] }) } }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
       if (body.includes("参考资料读取规划")) {
+        expect(body).toContain('<SEARCH_HIT term=\\"routing\\"');
+        expect(body).toContain("routing algorithm page");
         return new Response(
           JSON.stringify({
             choices: [{ message: { content: JSON.stringify({ pages: [{ documentId: "doc-a", pages: [2] }], images: [] }) } }]
@@ -150,6 +158,6 @@ describe("modelClient", () => {
     const answer = await requestChatCompletionWithTools("讲解路由算法", [document], providers[1], providers[1].models[0], "balanced");
 
     expect(answer).toBe("主回答");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

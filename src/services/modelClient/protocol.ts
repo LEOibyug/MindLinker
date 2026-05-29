@@ -103,7 +103,8 @@ ${answerModePrompts[answerMode].instruction}
 
 export const buildReferencePlanningPrompt = (
   prompt: string,
-  documents: ParsedReferenceDocument[]
+  documents: ParsedReferenceDocument[],
+  searchContext = ""
 ) => `${promptProtocolHeader}
 
 <task>参考资料读取规划</task>
@@ -118,6 +119,9 @@ ${prompt}
 
 参考地图：
 ${buildReferenceToolMap(documents) || "无"}
+
+文本搜索工具结果：
+${searchContext || "尚未执行文本搜索。"}
 </input>
 
 <tool_budget>
@@ -140,6 +144,40 @@ ${buildReferenceToolMap(documents) || "无"}
 - 只输出 JSON，不要输出解释。
 - 不要选择参考地图中不存在的 documentId、页码或图片 id。
 - 不要选择 PDF 页面截图或 <IMAGE FOR PAGE: ...> 占位图。
+</prohibitions>`;
+
+export const buildReferenceSearchTermsPrompt = (
+  prompt: string,
+  documents: ParsedReferenceDocument[]
+) => `${promptProtocolHeader}
+
+<task>参考文本搜索词规划</task>
+
+<instruction>
+请根据用户问题和参考地图，给出最值得在 PDF 已提取文本中检索的关键词。关键词用于本地搜索工具，不是最终回答。
+</instruction>
+
+<input>
+用户问题：
+${prompt}
+
+参考地图：
+${buildReferenceToolMap(documents) || "无"}
+</input>
+
+<tool_description>
+search_pdf_text 可在 PDF 已提取文本中检索多个关键词，并返回命中文本片段与页码标记。如果某个 PDF 没有可检索文本，工具会返回不可检索原因。
+</tool_description>
+
+<json_output_protocol>
+{"terms":["关键词1","关键词2","关键词3"]}
+</json_output_protocol>
+
+<prohibitions>
+- 只输出 JSON，不要输出解释。
+- terms 最多 8 个。
+- 关键词要短而具体，优先选择用户问题中的核心概念、公式名、方法名、章节名或同义英文术语。
+- 不要输出完整句子。
 </prohibitions>`;
 
 export const buildExplainableTermsPrompt = (

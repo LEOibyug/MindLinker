@@ -11,6 +11,24 @@ export type ReferenceToolPlan = {
   images: string[];
 };
 
+export type ReferenceTextSearchHit = {
+  documentId: string;
+  documentTitle: string;
+  pageNumber: number;
+  term: string;
+  text: string;
+  pageMarker: string;
+};
+
+export type ReferenceTextSearchResult = {
+  hits: ReferenceTextSearchHit[];
+  unavailableDocuments: Array<{
+    documentId: string;
+    documentTitle: string;
+    reason: string;
+  }>;
+};
+
 export type ReferenceToolBudget = {
   maxPages: number;
   maxImages: number;
@@ -57,6 +75,26 @@ const normalizePageNumbers = (pages: unknown): number[] =>
     ? [...new Set(pages.map((page) => Number(page)).filter((page) => Number.isInteger(page) && page > 0))]
     : [];
 
+export const parseReferenceSearchTermsJson = (rawText: string): string[] => {
+  const cleaned = rawText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  const parsed = JSON.parse(cleaned) as { terms?: unknown };
+  if (!Array.isArray(parsed.terms)) {
+    return [];
+  }
+  return [
+    ...new Set(
+      parsed.terms
+        .filter((term): term is string => typeof term === "string")
+        .map((term) => term.trim())
+        .filter(Boolean)
+    )
+  ].slice(0, 8);
+};
+
 export const parseReferencePlanJson = (rawText: string): ReferenceToolPlan => {
   const cleaned = rawText
     .trim()
@@ -78,6 +116,94 @@ export const parseReferencePlanJson = (rawText: string): ReferenceToolPlan => {
     ? [...new Set(parsed.images.filter((image): image is string => typeof image === "string" && image.trim().length > 0))]
     : [];
   return { pages, images };
+};
+
+const normalizeSearchText = (value: string) => value.replace(/\s+/g, " ").trim();
+
+const buildSearchSnippet = (text: string, index: number, termLength: number, radius = 90) => {
+  const normalized = normalizeSearchText(text);
+  const start = Math.max(0, index - radius);
+  const end = Math.min(normalized.length, index + termLength + radius);
+  return `${start > 0 ? "..." : ""}${normalized.slice(start, end)}${end < normalized.length ? "..." : ""}`;
+};
+
+export const searchReferenceText = (
+  documents: ParsedReferenceDocument[],
+  terms: string[],
+  options: { maxHitsPerTerm?: number; maxHitsTotal?: number } = {}
+): ReferenceTextSearchResult => {
+  const uniqueTerms = [
+    ...new Set(terms.map((term) => term.trim()).filter((term) => term.length > 0))
+  ];
+  const maxHitsPerTerm = options.maxHitsPerTerm ?? 4;
+  const maxHitsTotal = options.maxHitsTotal ?? 18;
+  const hits: ReferenceTextSearchHit[] = [];
+  const unavailableDocuments = documents
+    .filter((document) => document.kind === "pdf" && !document.pages.some((page) => normalizeSearchText(page.text).length > 0))
+    .map((document) => ({
+      documentId: document.id,
+      documentTitle: document.title,
+      reason: "该 PDF 没有可检索的提取文本，可能是扫描件、图片型 PDF，或解析结果为空。"
+    }));
+
+  for (const term of uniqueTerms) {
+    let hitsForTerm = 0;
+    const lowerTerm = term.toLocaleLowerCase();
+    for (const document of documents) {
+      if (hits.length >= maxHitsTotal || hitsForTerm >= maxHitsPerTerm) {
+        break;
+      }
+      if (document.kind !== "pdf") {
+        continue;
+      }
+      for (const page of document.pages) {
+        if (hits.length >= maxHitsTotal || hitsForTerm >= maxHitsPerTerm) {
+          break;
+        }
+        const text = normalizeSearchText(page.text);
+        if (!text) {
+          continue;
+        }
+        const matchIndex = text.toLocaleLowerCase().indexOf(lowerTerm);
+        if (matchIndex < 0) {
+          continue;
+        }
+        hits.push({
+          documentId: document.id,
+          documentTitle: document.title,
+          pageNumber: page.pageNumber,
+          term,
+          text: buildSearchSnippet(text, matchIndex, term.length),
+          pageMarker: `${document.title} · p.${page.pageNumber}`
+        });
+        hitsForTerm += 1;
+      }
+    }
+  }
+
+  return { hits, unavailableDocuments };
+};
+
+export const buildReferenceSearchContext = (result: ReferenceTextSearchResult) => {
+  const hitText =
+    result.hits.length > 0
+      ? result.hits
+          .map(
+            (hit) =>
+              `<SEARCH_HIT term="${escapeXmlAttribute(hit.term)}" documentId="${escapeXmlAttribute(hit.documentId)}" page="${hit.pageNumber}" marker="${escapeXmlAttribute(hit.pageMarker)}">${hit.text}</SEARCH_HIT>`
+          )
+          .join("\n")
+      : "<NO_TEXT_SEARCH_HITS />";
+  const unavailableText =
+    result.unavailableDocuments.length > 0
+      ? result.unavailableDocuments
+          .map(
+            (item) =>
+              `<UNSEARCHABLE_PDF documentId="${escapeXmlAttribute(item.documentId)}" title="${escapeXmlAttribute(item.documentTitle)}">${item.reason}</UNSEARCHABLE_PDF>`
+          )
+          .join("\n")
+      : "";
+  return `${hitText}${unavailableText ? `\n${unavailableText}` : ""}`;
 };
 
 const cloneDocumentShell = (document: ParsedReferenceDocument, pages: ParsedPdfPage[], images: ReferenceImageAsset[]): ParsedReferenceDocument => ({

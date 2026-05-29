@@ -12,6 +12,24 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - PDF Text Search Reference Tool
+
+- Added a local PDF text search tool that accepts multiple keywords and returns matching snippets with document titles and page markers.
+- Reports PDFs with no searchable extracted text, so scanned or image-only PDFs do not silently look searchable.
+- Added a model-driven search-term planning request before reference page planning; search results are fed into the page/image planning prompt.
+- Reused the same search-assisted planning flow for inline position questions.
+- Added fallback behavior so search-term planning failures still continue with the reference map planner.
+- Regression coverage:
+  - search-term JSON parsing strips fences, deduplicates terms, and limits output;
+  - PDF text search returns snippets and page markers;
+  - PDFs without extracted text report an explicit unavailable reason;
+  - main-answer reference planning receives search hits and still scopes the final request to selected pages.
+- Verification:
+  - `npm test -- --run src/services/referenceTools.test.ts src/services/modelClient.test.ts`
+  - `npx tsc --noEmit`
+  - `npm test -- --run`
+  - `npm run build`
+
 ### 2026-05-29 - Reference Read Planning For Model Answers
 
 - Added a compact reference-map planning step before main-answer generation so the model first selects relevant pages and parsed reference images, then receives only the scoped context for the streamed answer.

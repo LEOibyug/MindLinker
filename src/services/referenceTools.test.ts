@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildReferenceToolContext,
   buildReferenceToolMap,
+  buildReferenceSearchContext,
   parseReferencePlanJson,
+  parseReferenceSearchTermsJson,
+  searchReferenceText,
   resolveReferencePlan
 } from "./referenceTools";
 import type { ParsedReferenceDocument } from "./pdfReferences";
@@ -48,6 +51,49 @@ describe("referenceTools", () => {
       pages: [{ documentId: "doc-a", pages: [2, 3] }],
       images: ["doc-a-p2-img1"]
     });
+  });
+
+  it("parses search terms from json with duplicate terms removed", () => {
+    expect(parseReferenceSearchTermsJson("```json\n{\"terms\":[\"Dijkstra\",\"路由\",\"Dijkstra\",\"\"]}\n```")).toEqual([
+      "Dijkstra",
+      "路由"
+    ]);
+  });
+
+  it("searches extracted PDF text and returns page markers with snippets", () => {
+    const result = searchReferenceText([documentA], ["Dijkstra", "坏消息"], { maxHitsPerTerm: 2 });
+
+    expect(result.hits.map((hit) => `${hit.term}:${hit.pageMarker}`)).toEqual([
+      "Dijkstra:Network.pdf · p.2",
+      "坏消息:Network.pdf · p.3"
+    ]);
+    expect(result.hits[0].text).toContain("Dijkstra 最短路径算法");
+    expect(buildReferenceSearchContext(result)).toContain('<SEARCH_HIT term="Dijkstra" documentId="doc-a" page="2"');
+  });
+
+  it("reports PDFs without searchable extracted text", () => {
+    const scannedPdf: ParsedReferenceDocument = {
+      ...documentA,
+      id: "scan",
+      title: "Scanned.pdf",
+      pages: [
+        { pageNumber: 1, text: "   ", textQuality: "poor", needsImage: true },
+        { pageNumber: 2, text: "", textQuality: "poor", needsImage: true }
+      ],
+      images: []
+    };
+    const result = searchReferenceText([scannedPdf], ["entropy"]);
+
+    expect(result.hits).toEqual([]);
+    expect(result.unavailableDocuments).toEqual([
+      {
+        documentId: "scan",
+        documentTitle: "Scanned.pdf",
+        reason: "该 PDF 没有可检索的提取文本，可能是扫描件、图片型 PDF，或解析结果为空。"
+      }
+    ]);
+    expect(buildReferenceSearchContext(result)).toContain("<NO_TEXT_SEARCH_HITS />");
+    expect(buildReferenceSearchContext(result)).toContain("<UNSEARCHABLE_PDF");
   });
 
   it("resolves selected pages and images under budget", () => {
