@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { GraphErrorBoundary } from "../components/reader/GraphErrorBoundary";
 import * as pdfReferences from "../services/pdfReferences";
+import { normalizePlainTextForAnchor } from "../domain/textAnchors";
 
 const seededProjects = [
   {
@@ -2467,6 +2468,71 @@ describe("MindLinker shell", () => {
 
     expect(within(firstItem).getAllByRole("button", { name: /查看位置提问/ })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: /查看位置提问/ })).toHaveLength(2);
+  });
+
+  it("keeps position question markers on the intended heading after preceding markdown lists", async () => {
+    const user = userEvent.setup();
+    seedExistingProjects();
+    window.localStorage.setItem(
+      "mindlinker.conversationDrafts",
+      JSON.stringify({
+        "cross-entropy": {
+          title: "网络服务",
+          prompt: "解释网络层服务",
+          answerMode: "balanced",
+          referenceMode: "direct",
+          referenceTitles: [],
+          referenceContext: "",
+          openAIInputPreview: "",
+          answerMarkdown: [
+            "无连接服务的特点是：",
+            "",
+            "- 不事先为一系列分组确定传输路径；",
+            "- 每个分组独立选择路径；",
+            "- 不同分组可能经过不同路径；",
+            "- 对应的网络称为数据报网络。",
+            "",
+            "## 2.2 连接服务：虚电路网络",
+            "",
+            "连接服务的特点是："
+          ].join("\n"),
+          modelStatus: "generated",
+          generated: true,
+          explanationTerms: []
+        }
+      })
+    );
+    const visibleBeforeHeading =
+      "无连接服务的特点是：不事先为一系列分组确定传输路径；每个分组独立选择路径；不同分组可能经过不同路径；对应的网络称为数据报网络。";
+    window.localStorage.setItem(
+      "mindlinker.inlineConversations",
+      JSON.stringify([
+        {
+          id: "inline-heading-service",
+          projectId: "loss-functions",
+          conversationId: "cross-entropy",
+          anchor: "当前位置",
+          anchorOffset: normalizePlainTextForAnchor(visibleBeforeHeading).length + 1,
+          anchorText: "2.2 连接服务：虚电路网络",
+          positionLabel: "位置：连接服务标题附近",
+          question: "这里为什么叫虚电路？",
+          answer: "因为传输前会建立逻辑连接。",
+          messages: [
+            { role: "user", content: "这里为什么叫虚电路？" },
+            { role: "assistant", content: "因为传输前会建立逻辑连接。" }
+          ],
+          saved: true
+        }
+      ])
+    );
+    render(<App />);
+    await enterWorkspace(user);
+
+    const heading = screen.getByRole("heading", { name: /2\.2 连接服务：虚电路网络/ });
+    const previousListItem = screen.getByText(/不同分组可能经过不同路径/).closest("li")!;
+
+    expect(within(heading).getAllByRole("button", { name: /查看位置提问/ })).toHaveLength(1);
+    expect(within(previousListItem).queryByRole("button", { name: /查看位置提问/ })).not.toBeInTheDocument();
   });
 
   it("shows explanations and titled inline questions in the summary panel", async () => {

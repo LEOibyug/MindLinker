@@ -234,13 +234,28 @@ export const renderAnswerText = (
     const end = start + lineText.length;
     plainOffset = end + (lineText ? 1 : 0);
     return inlineConversationMarkers
-      .filter((marker) => typeof marker.offset === "number" && (marker.offset ?? 0) >= start && (marker.offset ?? 0) <= end)
+      .filter((marker) => {
+        if (typeof marker.offset !== "number") {
+          return false;
+        }
+        const markerAnchorText = normalizePlainTextForAnchor(marker.anchorText);
+        if (markerAnchorText && lineText && (lineText.includes(markerAnchorText) || markerAnchorText.includes(lineText))) {
+          return true;
+        }
+        const offset = marker.offset ?? 0;
+        if (!lineText) {
+          return false;
+        }
+        return offset >= start && offset < end;
+      })
       .map((marker) => ({ ...marker, offset: Math.max(0, (marker.offset ?? start) - start) }));
   };
   const getLegacyMarkersForText = (value: string) =>
     inlineConversationMarkers.filter((marker) => typeof marker.offset !== "number" && marker.anchorText && value.includes(marker.anchorText));
   const renderLineEndMarkers = (markers: InlineConversationMarkerBinding[], keyPrefix: string) => {
-    const positionalMarkers = markers.filter((marker) => typeof marker.offset === "number");
+    const positionalMarkers = markers
+      .filter((marker) => typeof marker.offset === "number")
+      .filter((marker, index, items) => items.findIndex((item) => item.conversation.id === marker.conversation.id) === index);
     if (positionalMarkers.length === 0) {
       return null;
     }
@@ -341,9 +356,9 @@ export const renderAnswerText = (
           plainOffset += 1;
           return;
         }
-        const lineMarkers = [...getMarkersForText(line), ...getLegacyMarkersForText(line)];
         if (isMarkdownListLine(line)) {
           const contentLine = line.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "");
+          const lineMarkers = [...getMarkersForText(contentLine), ...getLegacyMarkersForText(contentLine)];
           listItems.push({
             id: listItemIndex,
             content: (
@@ -366,6 +381,7 @@ export const renderAnswerText = (
           return;
         }
         if (listItems.length > 0 && /^\s+\S/.test(rawLine)) {
+          const lineMarkers = [...getMarkersForText(line), ...getLegacyMarkersForText(line)];
           const lastItem = listItems[listItems.length - 1];
           lastItem.content = (
             <>
@@ -389,9 +405,11 @@ export const renderAnswerText = (
         flushList();
         const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
         if (headingMatch) {
+          const headingText = headingMatch[2];
+          const lineMarkers = [...getMarkersForText(headingText), ...getLegacyMarkersForText(headingText)];
           const level = headingMatch[1].length;
           const content = renderInlineAnswerWithTerms(
-            headingMatch[2],
+            headingText,
             textBoundTerms,
             annotationsRevealed,
             openExplanation,
@@ -401,16 +419,32 @@ export const renderAnswerText = (
             referenceImages
           );
           if (level === 1) {
-            elements.push(<h1 key={`h1-${elements.length}`}>{content}</h1>);
+            elements.push(
+              <h1 key={`h1-${elements.length}`}>
+                {content}
+                {renderLineEndMarkers(lineMarkers, `h1-${elements.length}`)}
+              </h1>
+            );
             return;
           }
           if (level === 2) {
-            elements.push(<h2 key={`h2-${elements.length}`}>{content}</h2>);
+            elements.push(
+              <h2 key={`h2-${elements.length}`}>
+                {content}
+                {renderLineEndMarkers(lineMarkers, `h2-${elements.length}`)}
+              </h2>
+            );
             return;
           }
-          elements.push(<h3 key={`h3-${elements.length}`} className={level >= 4 ? "minor-heading" : undefined}>{content}</h3>);
+          elements.push(
+            <h3 key={`h3-${elements.length}`} className={level >= 4 ? "minor-heading" : undefined}>
+              {content}
+              {renderLineEndMarkers(lineMarkers, `h3-${elements.length}`)}
+            </h3>
+          );
           return;
         }
+        const lineMarkers = [...getMarkersForText(line), ...getLegacyMarkersForText(line)];
         elements.push(
           <p key={`p-${elements.length}`}>
             {renderInlineAnswerWithTerms(

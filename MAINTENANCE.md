@@ -12,6 +12,21 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Line-Level Inline Question Anchors
+
+- Changed saved inline-question markers to resolve at line/block level instead of trying to preserve an exact character insertion point.
+- Marker placement now prefers the saved anchor text for the rendered line, with offset as a fallback for older records.
+- Headings can now render line-end inline-question markers, matching paragraphs, list items, and formula blocks.
+- Deduplicated markers by conversation id so the same saved question does not appear twice on one line.
+- Regression coverage:
+  - markers remain on the intended heading after preceding Markdown lists;
+  - repeated terms on the same line still support multiple saved questions arranged together.
+- Verification:
+  - `npm test -- --run src/app/App.test.tsx -t "position question markers"`
+  - `npx tsc --noEmit`
+  - `npm test -- --run`
+  - `npm run build`
+
 ### 2026-05-29 - Text Fence Rendering Cleanup
 
 - Fixed model answers that use ` ```text ` or other plain-text code fences for examples such as IP addresses and CIDR notation.
