@@ -12,6 +12,16 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Home Container Refactor
+
+- Extracted home-page prop assembly from `App.tsx` into `app/home/HomeContainer.tsx`.
+- Kept `HomePage` as the presentational component and `useHomeProjectActions` as the behavior hook; the new container only owns wiring between the two.
+- Made the home and workspace render branches in `App.tsx` symmetrical: app shell plus feature container.
+- Verification:
+  - `npm test -- --run src/components/home/HomePage.test.tsx src/app/App.test.tsx -t "home|主页|参考准备|starts a usable project|自主学习导读|appends home references|removes an attached home reference|prominent parsing|InfoTheory|RAG|打开项目|导入文件"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Workspace Container Refactor
 
 - Extracted workspace UI orchestration from `App.tsx` into `app/workspace/WorkspaceContainer.tsx`.

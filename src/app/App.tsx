@@ -29,8 +29,8 @@ import { appendRuntimeLog } from "../services/runtimeLog";
 import { SettingsPage } from "../components/panels/SettingsPage";
 import { usePersistentState, writeStoredValue } from "../services/persistentState";
 import type { ReaderContextMenuState } from "../components/reader/readerInteraction";
-import { HomePage } from "../components/home/HomePage";
 import { AppChrome } from "./chrome/AppChrome";
+import { HomeContainer } from "./home/HomeContainer";
 import { WorkspaceContainer } from "./workspace/WorkspaceContainer";
 import { useConversationGeneration } from "./hooks/useConversationGeneration";
 import { useProviderSettingsActions } from "./hooks/useProviderSettingsActions";
@@ -554,20 +554,21 @@ export function App() {
         onShellClick={() => setContextMenu(null)}
       >
         {settingsOpen ? renderSettingsPage() : null}
-        <HomePage
-          answerMode={homeAnswerMode}
+        <HomeContainer
+          homeAnswerMode={homeAnswerMode}
+          homeFiles={homeFiles}
+          homePrompt={homePrompt}
           homeReferenceItems={homeReferenceItems}
-          isSettingsOpen={settingsOpen}
-          projects={localProjects}
+          localProjects={localProjects}
           projectTitles={projectTitles}
-          prompt={homePrompt}
-          referenceStatusText={getHomeReferenceStatusText()}
-          onAnswerModeChange={setHomeAnswerMode}
-          onFilesAdded={(files) => void parseHomeReferences([...homeFiles, ...files])}
-          onOpenProject={openProjectFromHome}
-          onPromptChange={setHomePrompt}
-          onRemoveReference={removeHomeReference}
-          onStart={() => void startProjectFromPrompt()}
+          settingsOpen={settingsOpen}
+          getHomeReferenceStatusText={getHomeReferenceStatusText}
+          openProjectFromHome={openProjectFromHome}
+          parseHomeReferences={parseHomeReferences}
+          removeHomeReference={removeHomeReference}
+          setHomeAnswerMode={setHomeAnswerMode}
+          setHomePrompt={setHomePrompt}
+          startProjectFromPrompt={startProjectFromPrompt}
         />
       </AppChrome>
     );
