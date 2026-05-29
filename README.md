@@ -112,9 +112,11 @@ Linux 下需要图形桌面环境。若在服务器、容器或无桌面环境�
 
 #### Windows
 
-依赖安装方式相同：
+Windows 下建议使用系统原生环境运行，例如 PowerShell 或 `cmd.exe`，不要求使用 WSL。
 
-```bash
+PowerShell：
+
+```powershell
 git clone git@github.com:LEOibyug/MindLinker.git
 cd MindLinker
 npm install
@@ -126,13 +128,7 @@ npm install
 VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .
 ```
 
-因此在 Windows 原生 `cmd.exe` 或 PowerShell 中直接运行 `npm run dev` 可能失败。推荐优先使用 Git Bash 或 WSL：
-
-```bash
-npm run dev
-```
-
-如果使用 PowerShell，可以分两个终端启动：
+因此在 Windows 原生 PowerShell 或 `cmd.exe` 中直接运行 `npm run dev` 可能失败。当前推荐使用两个终端手动启动。
 
 终端 1：
 
@@ -147,7 +143,14 @@ $env:VITE_DEV_SERVER_URL="http://127.0.0.1:5173"
 npx electron .
 ```
 
-后续可以引入 `cross-env`，将脚本改为跨平台写法，让 Windows、macOS 和 Linux 都能直接使用 `npm run dev`。
+如果使用 `cmd.exe`，终端 2 可改为：
+
+```bat
+set VITE_DEV_SERVER_URL=http://127.0.0.1:5173
+npx electron .
+```
+
+后续可以引入 `cross-env`，将脚本改为跨平台写法，让 Windows、macOS 和 Linux 都能直接使用 `npm run dev`，不需要用户切换 shell。
 
 #### 浏览器预览与桌面应用的区别
 
