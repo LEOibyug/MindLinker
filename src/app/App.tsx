@@ -12,10 +12,6 @@ import type {
   InlineConversation,
   InlineConversationDraft,
 } from "../domain/inlineConversations";
-import {
-  buildProjectNavigationTarget,
-  deleteProjectFromCollections,
-} from "../domain/projectLifecycle";
 import type { ParsedReferenceDocument } from "../services/pdfReferences";
 import { getActiveProviderId } from "../services/providerSettings";
 import { appendRuntimeLog } from "../services/runtimeLog";
@@ -363,6 +359,7 @@ export function App() {
     clearVectorStore,
     createConversationInActiveProject,
     deleteConversation,
+    deleteProject,
     deleteProjectReference,
     introduceReference,
     rebuildActiveVectorStore,
@@ -378,6 +375,7 @@ export function App() {
     activeProjectTitle,
     allDocuments,
     confirmingConversationDeleteId,
+    confirmingProjectDeleteId,
     confirmingReferenceDeleteId,
     conversationDrafts,
     conversationExplanations,
@@ -388,11 +386,13 @@ export function App() {
     localVectorStores,
     parsedReferences,
     projectDocuments,
+    projectTitles,
     ragEnabled,
     referenceParseCache,
     runningConversationIds,
     setActiveConversationId,
     setActiveProjectId,
+    setAppView,
     setAnnotationsRevealed,
     setAppliedPatch,
     setAvailableExplanations,
@@ -411,6 +411,7 @@ export function App() {
     setNewConversationPrompt,
     setNotice,
     setParsedProjectReferences,
+    setProjectTitles,
     setReferenceParseCache,
     setReferencePlanId,
     setRewriteDraft,
@@ -422,51 +423,6 @@ export function App() {
     hasRestorableAnnotations,
     logDebugMessage
   });
-
-  const deleteProject = (projectId: string) => {
-    const projectToDelete = localProjects.find((project) => project.id === projectId);
-    if (!projectToDelete) {
-      return;
-    }
-    if (confirmingProjectDeleteId !== projectId) {
-      setConfirmingProjectDeleteId(projectId);
-      setNotice(`再次确认后会删除项目：${projectTitles[projectId] ?? projectToDelete.title}`);
-      return;
-    }
-    const deletion = deleteProjectFromCollections({
-      projectId,
-      projects: localProjects,
-      projectTitles,
-      includedDocumentIds,
-      parsedReferences,
-      referenceParseCache,
-      drafts: conversationDrafts,
-      explanations: conversationExplanations,
-      inlineConversations
-    });
-    setLocalProjects(deletion.projects);
-    setProjectTitles(deletion.projectTitles);
-    setIncludedDocumentIds(deletion.includedDocumentIds);
-    setParsedProjectReferences(deletion.parsedReferences);
-    setReferenceParseCache(deletion.referenceParseCache);
-    setStoredConversationDrafts(deletion.drafts);
-    setConversationExplanations(deletion.explanations);
-    setInlineConversations(deletion.inlineConversations);
-    if (!deletion.nextProject) {
-      setActiveProjectId("");
-      setActiveConversationId("");
-      setAppView("home");
-      setNotice("已删除当前学习项目");
-      return;
-    }
-    setActiveProjectId(deletion.nextProject.id);
-    const target = buildProjectNavigationTarget(deletion.nextProject);
-    setActiveConversationId(target.conversationId);
-    setAvailableExplanations(conversationExplanations[target.conversationId] ?? []);
-    setExplanationStack([]);
-    setConfirmingProjectDeleteId(null);
-    setNotice("已删除当前学习项目");
-  };
 
   const renderSettingsPage = () => (
     <SettingsPage

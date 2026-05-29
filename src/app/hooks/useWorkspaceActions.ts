@@ -10,6 +10,7 @@ import {
   buildInitialProjectConversation,
   buildProjectNavigationTarget,
   deleteConversationFromProject,
+  deleteProjectFromCollections,
   getConversationGenerationPhase,
   removeProjectDocument
 } from "../../domain/projectLifecycle";
@@ -46,6 +47,7 @@ type UseWorkspaceActionsOptions = {
   activeProjectTitle: string;
   allDocuments: ParsedReferenceDocument[];
   confirmingConversationDeleteId: string | null;
+  confirmingProjectDeleteId: string | null;
   confirmingReferenceDeleteId: string | null;
   conversationDrafts: Record<string, ConversationDraft>;
   conversationExplanations: Record<string, Explanation[]>;
@@ -56,11 +58,13 @@ type UseWorkspaceActionsOptions = {
   localVectorStores: VectorStore[];
   parsedReferences: ParsedReferenceDocument[];
   projectDocuments: ParsedReferenceDocument[];
+  projectTitles: Record<string, string>;
   ragEnabled: boolean;
   referenceParseCache: Record<string, ReferenceParseCacheEntry>;
   runningConversationIds: string[];
   setActiveConversationId: StateSetter<string>;
   setActiveProjectId: StateSetter<string>;
+  setAppView: StateSetter<"home" | "workspace">;
   setAnnotationsRevealed: StateSetter<boolean>;
   setAppliedPatch: StateSetter<boolean>;
   setAvailableExplanations: StateSetter<Explanation[]>;
@@ -79,6 +83,7 @@ type UseWorkspaceActionsOptions = {
   setNewConversationPrompt: StateSetter<string>;
   setNotice: StateSetter<string | null>;
   setParsedProjectReferences: StateSetter<ParsedReferenceDocument[]>;
+  setProjectTitles: StateSetter<Record<string, string>>;
   setReferenceParseCache: StateSetter<Record<string, ReferenceParseCacheEntry>>;
   setReferencePlanId: StateSetter<string | null>;
   setRewriteDraft: StateSetter<string | null>;
@@ -110,6 +115,7 @@ export const useWorkspaceActions = ({
   activeProjectTitle,
   allDocuments,
   confirmingConversationDeleteId,
+  confirmingProjectDeleteId,
   confirmingReferenceDeleteId,
   conversationDrafts,
   conversationExplanations,
@@ -120,11 +126,13 @@ export const useWorkspaceActions = ({
   localVectorStores,
   parsedReferences,
   projectDocuments,
+  projectTitles,
   ragEnabled,
   referenceParseCache,
   runningConversationIds,
   setActiveConversationId,
   setActiveProjectId,
+  setAppView,
   setAnnotationsRevealed,
   setAppliedPatch,
   setAvailableExplanations,
@@ -143,6 +151,7 @@ export const useWorkspaceActions = ({
   setNewConversationPrompt,
   setNotice,
   setParsedProjectReferences,
+  setProjectTitles,
   setReferenceParseCache,
   setReferencePlanId,
   setRewriteDraft,
@@ -263,6 +272,51 @@ export const useWorkspaceActions = ({
       setAnnotationsRevealed(hasRestorableAnnotations(nextConversation.id, nextConversation.status));
     }
     setNotice("已删除对话");
+  };
+
+  const deleteProject = (projectId: string) => {
+    const projectToDelete = localProjects.find((project) => project.id === projectId);
+    if (!projectToDelete) {
+      return;
+    }
+    if (confirmingProjectDeleteId !== projectId) {
+      setConfirmingProjectDeleteId(projectId);
+      setNotice(`再次确认后会删除项目：${projectTitles[projectId] ?? projectToDelete.title}`);
+      return;
+    }
+    const deletion = deleteProjectFromCollections({
+      projectId,
+      projects: localProjects,
+      projectTitles,
+      includedDocumentIds,
+      parsedReferences,
+      referenceParseCache,
+      drafts: conversationDrafts,
+      explanations: conversationExplanations,
+      inlineConversations
+    });
+    setLocalProjects(deletion.projects);
+    setProjectTitles(deletion.projectTitles);
+    setIncludedDocumentIds(deletion.includedDocumentIds);
+    setParsedProjectReferences(deletion.parsedReferences);
+    setReferenceParseCache(deletion.referenceParseCache);
+    setStoredConversationDrafts(deletion.drafts);
+    setConversationExplanations(deletion.explanations);
+    setInlineConversations(deletion.inlineConversations);
+    if (!deletion.nextProject) {
+      setActiveProjectId("");
+      setActiveConversationId("");
+      setAppView("home");
+      setNotice("已删除当前学习项目");
+      return;
+    }
+    setActiveProjectId(deletion.nextProject.id);
+    const target = buildProjectNavigationTarget(deletion.nextProject);
+    setActiveConversationId(target.conversationId);
+    setAvailableExplanations(conversationExplanations[target.conversationId] ?? []);
+    setExplanationStack([]);
+    setConfirmingProjectDeleteId(null);
+    setNotice("已删除当前学习项目");
   };
 
   const deleteProjectReference = (documentId: string) => {
@@ -406,6 +460,7 @@ export const useWorkspaceActions = ({
     clearVectorStore,
     createConversationInActiveProject,
     deleteConversation,
+    deleteProject,
     deleteProjectReference,
     introduceReference,
     rebuildActiveVectorStore,

@@ -69,6 +69,7 @@ const defaultOptions = {
   activeProjectTitle: "信息论",
   allDocuments: [referenceA],
   confirmingConversationDeleteId: null as string | null,
+  confirmingProjectDeleteId: null as string | null,
   confirmingReferenceDeleteId: null as string | null,
   conversationDrafts: { "conversation-a": draft } as Record<string, ConversationDraft>,
   conversationExplanations: {} as Record<string, Explanation[]>,
@@ -79,11 +80,13 @@ const defaultOptions = {
   localVectorStores: [] as VectorStore[],
   parsedReferences: [referenceA],
   projectDocuments: [referenceA],
+  projectTitles: { "project-a": "信息论", "project-b": "学习理论" } as Record<string, string>,
   ragEnabled: false,
   referenceParseCache: {} as Record<string, ReferenceParseCacheEntry>,
   runningConversationIds: [] as string[],
   setActiveConversationId: vi.fn(),
   setActiveProjectId: vi.fn(),
+  setAppView: vi.fn(),
   setAnnotationsRevealed: vi.fn(),
   setAppliedPatch: vi.fn(),
   setAvailableExplanations: vi.fn(),
@@ -102,6 +105,7 @@ const defaultOptions = {
   setNewConversationPrompt: vi.fn(),
   setNotice: vi.fn(),
   setParsedProjectReferences: vi.fn(),
+  setProjectTitles: vi.fn(),
   setReferenceParseCache: vi.fn(),
   setReferencePlanId: vi.fn(),
   setRewriteDraft: vi.fn(),
@@ -209,5 +213,23 @@ describe("useWorkspaceActions", () => {
     act(() => result.current.deleteProjectReference("ref-a"));
     expect(options.setConfirmingReferenceDeleteId).toHaveBeenCalledWith("ref-a");
     expect(options.setNotice).toHaveBeenCalledWith("再次确认后会删除参考：A.md");
+  });
+
+  it("confirms before deleting projects and navigates to the next project", () => {
+    const { result, options } = renderWorkspaceActions();
+
+    act(() => result.current.deleteProject("project-a"));
+
+    expect(options.setConfirmingProjectDeleteId).toHaveBeenCalledWith("project-a");
+    expect(options.setNotice).toHaveBeenCalledWith("再次确认后会删除项目：信息论");
+
+    const confirmed = renderWorkspaceActions({ confirmingProjectDeleteId: "project-a" });
+    act(() => confirmed.result.current.deleteProject("project-a"));
+
+    expect(confirmed.options.setLocalProjects).toHaveBeenCalledWith([otherProject]);
+    expect(confirmed.options.setActiveProjectId).toHaveBeenCalledWith("project-b");
+    expect(confirmed.options.setActiveConversationId).toHaveBeenCalledWith("conversation-c");
+    expect(confirmed.options.setConfirmingProjectDeleteId).toHaveBeenCalledWith(null);
+    expect(confirmed.options.setNotice).toHaveBeenCalledWith("已删除当前学习项目");
   });
 });

@@ -12,6 +12,18 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Project Delete Action Refactor
+
+- Moved project deletion confirmation, cleanup, and next-project navigation from `App.tsx` into `app/hooks/useWorkspaceActions.ts`.
+- Kept project deletion alongside conversation deletion and reference deletion so workspace lifecycle actions share one hook boundary.
+- Added a hook regression test for two-step project deletion and navigation to the remaining project.
+- Reduced `App.tsx` from roughly 623 lines to roughly 579 lines.
+- Verification:
+  - `npm test -- --run src/app/hooks/useWorkspaceActions.test.tsx`
+  - `npm test -- --run src/app/App.test.tsx -t "删除项目|delete project|confirmation|项目文件夹|home|主页"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - App Derived State Hook Refactor
 
 - Extracted active project/conversation selection, active references, active draft, visible explanation stack, rendered explanations, active inline conversations, project vector stores, reference-change plan lookup, and knowledge graph fallback construction from `App.tsx` into `app/hooks/useAppDerivedState.ts`.
