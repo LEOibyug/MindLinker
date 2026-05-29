@@ -12,6 +12,16 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - App Derived State Hook Refactor
+
+- Extracted active project/conversation selection, active references, active draft, visible explanation stack, rendered explanations, active inline conversations, project vector stores, reference-change plan lookup, and knowledge graph fallback construction from `App.tsx` into `app/hooks/useAppDerivedState.ts`.
+- Kept `App.tsx` responsible for owning state and wiring feature hooks, while computed read models now live behind one hook boundary.
+- Reduced `App.tsx` from roughly 669 lines to roughly 623 lines.
+- Verification:
+  - `npm test -- --run src/app/App.test.tsx -t "switches between learning projects|知识图谱|graph|explanation|解释|home|主页|new conversation|新建对话|删除项目|删除对话|删除参考|vector|向量库"`
+  - `npm test`
+  - `npm run build -- --mode development`
+
 ### 2026-05-29 - Home Container Refactor
 
 - Extracted home-page prop assembly from `App.tsx` into `app/home/HomeContainer.tsx`.

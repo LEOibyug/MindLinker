@@ -1,24 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  buildConversationDraft,
   normalizeStoredConversationDrafts,
   normalizeStoredInlineConversations,
   isLegacySavedInlineConversation,
 } from "../domain/conversationDrafts";
 import type { AnswerMode, ConversationDraft, HomeReferenceItem, ReferenceParseCacheEntry } from "../domain/conversationDrafts";
-import {
-  providerConfigs,
-  referenceChangePlans,
-} from "../domain/types";
+import { providerConfigs } from "../domain/types";
 import type { LearningProject, ProviderConfig, VectorStore } from "../domain/types";
-import type { ConversationKnowledgeGraph } from "../domain/types";
 import type { Explanation } from "../domain/explanations";
-import { bindExplanationsToAnswerText } from "../domain/explanations";
 import type {
   InlineConversation,
   InlineConversationDraft,
 } from "../domain/inlineConversations";
-import { buildDraftKnowledgeGraph, buildProjectKnowledgeGraph } from "../domain/knowledgeGraph";
 import {
   buildProjectNavigationTarget,
   deleteProjectFromCollections,
@@ -38,26 +31,7 @@ import { useExplanationActions } from "./hooks/useExplanationActions";
 import { useInlineConversationActions } from "./hooks/useInlineConversationActions";
 import { useHomeProjectActions } from "./hooks/useHomeProjectActions";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
-
-const emptyKnowledgeGraph: ConversationKnowledgeGraph = {
-  nodes: [],
-  edges: []
-};
-
-const emptyConversation = {
-  id: "",
-  title: "",
-  status: "idle" as const,
-  explanationSeed: "",
-  referenceState: "refs:empty"
-};
-
-const emptyProject: LearningProject = {
-  id: "",
-  title: "",
-  documents: [],
-  conversations: [emptyConversation]
-};
+import { useAppDerivedState } from "./hooks/useAppDerivedState";
 
 export function App() {
   const [appView, setAppView] = useState<"home" | "workspace">("home");
@@ -143,60 +117,40 @@ export function App() {
   const [referencePlanId, setReferencePlanId] = useState<string | null>(null);
   const [appliedPatch, setAppliedPatch] = useState(false);
 
-  const activeProject = localProjects.find((project) => project.id === activeProjectId) ?? localProjects[0] ?? emptyProject;
-  const activeConversation =
-    activeProject.conversations.find((conversation) => conversation.id === activeConversationId) ??
-    activeProject.conversations[0] ??
-    emptyConversation;
-  const activeProjectTitle = projectTitles[activeProject.id] ?? activeProject.title;
   const activeProviderId = getActiveProviderId(customProviders, activeProviderIdState);
-  const activeDocumentIds = includedDocumentIds[activeProject.id] ?? activeProject.documents;
-  const sampleReferences = useMemo<ParsedReferenceDocument[]>(() => [], []);
-  const allDocuments = useMemo(() => [...sampleReferences, ...parsedReferences], [parsedReferences, sampleReferences]);
-  const projectDocuments = allDocuments.filter((document) => activeDocumentIds.includes(document.id));
-  const activeDraft = conversationDrafts[activeConversation.id] ?? null;
-  const activeConversationRunning = runningConversationIds.includes(activeConversation.id);
-  const activeKnowledgeGraphResult = useMemo(() => {
-    try {
-      return {
-        graph: buildProjectKnowledgeGraph(
-          activeProject,
-          activeProjectTitle,
-          projectDocuments,
-          conversationDrafts,
-          conversationExplanations
-        ),
-        error: null as Error | null
-      };
-    } catch (error) {
-      return {
-        graph: buildDraftKnowledgeGraph({
-          ...(activeDraft ?? buildConversationDraft(activeConversation.title, [], false, "balanced")),
-          title: activeConversation.title
-        }),
-        error: error instanceof Error ? error : new Error(String(error))
-      };
-    }
-  }, [activeConversation.title, activeDraft, activeProject, activeProjectTitle, conversationDrafts, conversationExplanations, projectDocuments]);
-  const activeKnowledgeGraph = activeKnowledgeGraphResult.graph;
-  const visibleStack = useMemo(() => [...explanationStack].reverse(), [explanationStack]);
-  const activeConversationExplanations = useMemo(
-    () => conversationExplanations[activeConversation.id] ?? [],
-    [activeConversation.id, conversationExplanations]
-  );
-  const renderedConversationExplanations = useMemo(
-    () => bindExplanationsToAnswerText(activeDraft?.answerMarkdown ?? "", activeConversationExplanations),
-    [activeDraft?.answerMarkdown, activeConversationExplanations]
-  );
-  const activeReferencePlan = referencePlanId
-    ? referenceChangePlans.find((plan) => plan.id === referencePlanId) ?? null
-    : null;
-  const projectVectorStores = localVectorStores.filter((store) => store.projectId === activeProject.id);
-  const activeInlineConversations = inlineConversations.filter(
-    (conversation) =>
-      (!conversation.projectId || conversation.projectId === activeProject.id) &&
-      (!conversation.conversationId || conversation.conversationId === activeConversation.id)
-  );
+  const {
+    activeConversation,
+    activeConversationExplanations,
+    activeConversationRunning,
+    activeDocumentIds,
+    activeDraft,
+    activeInlineConversations,
+    activeKnowledgeGraph,
+    activeKnowledgeGraphResult,
+    activeProject,
+    activeProjectTitle,
+    activeReferencePlan,
+    allDocuments,
+    projectDocuments,
+    projectVectorStores,
+    renderedConversationExplanations,
+    visibleStack
+  } = useAppDerivedState({
+    activeConversationId,
+    activeProjectId,
+    activeProviderId,
+    conversationDrafts,
+    conversationExplanations,
+    explanationStack,
+    includedDocumentIds,
+    inlineConversations,
+    localProjects,
+    localVectorStores,
+    parsedReferences,
+    projectTitles,
+    referencePlanId,
+    runningConversationIds
+  });
   useEffect(() => {
     activeProjectIdRef.current = activeProjectId;
     activeConversationIdRef.current = activeConversationId;
