@@ -12,6 +12,18 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-05-29 - Generated Title Persistence
+
+- Fixed a race where the title model could successfully update the project/conversation title, then the later main-answer completion wrote an older draft back over it.
+- Final answer writes now merge with the latest stored and visible draft state, preserving generated titles and other concurrent draft fields.
+- Regression coverage:
+  - title response can arrive before answer completion without being overwritten by the completed draft.
+- Verification:
+  - `npm test -- --run src/app/hooks/useConversationGeneration.test.tsx`
+  - `npx tsc --noEmit`
+  - `npm test -- --run`
+  - `npm run build`
+
 ### 2026-05-29 - Line-Level Inline Question Anchors
 
 - Changed saved inline-question markers to resolve at line/block level instead of trying to preserve an exact character insertion point.

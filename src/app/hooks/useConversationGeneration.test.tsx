@@ -108,4 +108,78 @@ describe("useConversationGeneration", () => {
     expect(setNotice).toHaveBeenCalledWith("请在设置中配置可用的主模型 API");
     expect(logDebugMessage).toHaveBeenCalledWith("跳过模型请求：没有可用的主模型 API 配置");
   });
+
+  it("keeps a generated title when the answer completion writes the final draft later", async () => {
+    const setStoredConversationDrafts = vi.fn();
+    const setVisibleConversationDrafts = vi.fn();
+    const setLocalProjects = vi.fn();
+    const setProjectTitles = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = String(init?.body ?? "");
+      if (body.includes("项目标题生成任务")) {
+        return new Response(JSON.stringify({ choices: [{ message: { content: "网络层服务" } }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: "生成的主回复" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useConversationGeneration({
+        activeConversationId: "conversation-1",
+        activeProjectId: "project-1",
+        activeProviderId: "custom-compatible",
+        activeConversationReferenceState: "refs:empty",
+        conversationDrafts: {},
+        conversationExplanations: {},
+        customProviders: [{ ...placeholderProviders[0], baseUrl: "https://api.local.test/v1" }],
+        projectDocuments: [],
+        localProjects: [project],
+        runningConversationIds: [],
+        streamingLogStateRef: { current: {} },
+        isConversationVisible: () => true,
+        markConversationRunning: vi.fn(),
+        markConversationSettled: vi.fn(),
+        setAnnotationsRevealed: vi.fn(),
+        setAvailableExplanations: vi.fn(),
+        setConversationExplanations: vi.fn(),
+        setExplanationStack: vi.fn(),
+        setGenerationPhase: vi.fn(),
+        setLocalProjects,
+        setNotice: vi.fn(),
+        setProjectTitles,
+        setStoredConversationDrafts,
+        setVisibleConversationDrafts,
+        logDebugMessage: vi.fn()
+      })
+    );
+
+    await act(async () => {
+      await result.current.generateConversation("conversation-1", { ...draft, title: "自主学习导读" }, [], "project-1");
+    });
+
+    const titleUpdater = setStoredConversationDrafts.mock.calls[0][0] as (drafts: Record<string, ConversationDraft>) => Record<string, ConversationDraft>;
+    const finalUpdater = setStoredConversationDrafts.mock.calls[1][0] as (drafts: Record<string, ConversationDraft>) => Record<string, ConversationDraft>;
+    const afterTitle = titleUpdater({
+      "conversation-1": { ...draft, title: "自主学习导读" }
+    });
+    expect(afterTitle["conversation-1"].title).toBe("网络层服务");
+    const afterFinal = finalUpdater(afterTitle);
+    expect(afterFinal["conversation-1"]).toMatchObject({
+      title: "网络层服务",
+      answerMarkdown: "生成的主回复",
+      modelStatus: "generated"
+    });
+
+    const visibleFinalUpdater = setVisibleConversationDrafts.mock.calls.at(-1)?.[0] as (
+      drafts: Record<string, ConversationDraft>
+    ) => Record<string, ConversationDraft>;
+    expect(visibleFinalUpdater({ "conversation-1": afterTitle["conversation-1"] })["conversation-1"].title).toBe("网络层服务");
+    expect(setProjectTitles).toHaveBeenCalledWith(expect.any(Function));
+    expect(setLocalProjects).toHaveBeenCalledWith(expect.any(Function));
+  });
 });

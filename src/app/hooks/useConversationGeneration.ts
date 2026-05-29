@@ -232,10 +232,26 @@ export const useConversationGeneration = ({
         explanationTerms: [],
         modelStatus: "generated"
       });
-      setStoredConversationDrafts((drafts) => ({ ...drafts, [conversationId]: completedDraft }));
+      setStoredConversationDrafts((drafts) => ({
+        ...drafts,
+        [conversationId]: completeConversationDraft({
+          ...(drafts[conversationId] ?? draft),
+          answerMarkdown: cleanAnswer,
+          explanationTerms: [],
+          modelStatus: "generated"
+        })
+      }));
       setConversationExplanations((items) => ({ ...items, [conversationId]: items[conversationId] ?? [] }));
       if (shouldUpdateVisibleConversation()) {
-        setVisibleConversationDrafts((drafts) => ({ ...drafts, [conversationId]: completedDraft }));
+        setVisibleConversationDrafts((drafts) => ({
+          ...drafts,
+          [conversationId]: completeConversationDraft({
+            ...(drafts[conversationId] ?? completedDraft),
+            answerMarkdown: cleanAnswer,
+            explanationTerms: [],
+            modelStatus: "generated"
+          })
+        }));
         setAvailableExplanations([]);
         setExplanationStack([]);
         setAnnotationsRevealed(false);
