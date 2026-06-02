@@ -136,6 +136,8 @@ describe("modelClient", () => {
     expect(planningPrompt).toContain("不要把“没有搜索命中”解释为“资料没有相关内容”");
     expect(planningPrompt).toContain("最终回答请求会默认提供全部可提取文本");
     expect(planningPrompt).toContain("仍要依据参考地图、页面摘要、章节标题、图表页和页面图片需求选择可能相关的视觉补充");
+    expect(planningPrompt).toContain("文字很少、为空或 textQuality=\"poor\" 的页面");
+    expect(planningPrompt).toContain("更应该主动选择页面图像");
 
     const searchPrompt = buildReferenceSearchTermsPrompt("讲解路由聚合", [document]);
     expect(searchPrompt).toContain("搜索无命中只代表这些关键词没有在已提取文本中出现");
