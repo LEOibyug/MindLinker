@@ -12,6 +12,12 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Larger Answer Outline Popover
+
+- Enlarged the reader outline popover so it behaves more like a practical side overview instead of a compact tooltip.
+- Kept the outline as a non-width-contributing overlay to avoid reintroducing horizontal reader scrolling.
+- Added coverage for the large outline popover class.
+
 ### 2026-06-02 - Answer Outline Popover Height Fix
 
 - Fixed the reader outline panel being compressed into a thin strip after the no-horizontal-scroll overlay change.

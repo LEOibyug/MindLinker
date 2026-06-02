@@ -1068,7 +1068,7 @@ h3 {
 }
 
 .answer-outline-overlay.open {
-  width: min(220px, calc(100% - 36px));
+  width: min(286px, calc(100% - 36px));
 }
 
 .answer-outline-toggle {
@@ -1113,8 +1113,13 @@ h3 {
 .answer-outline-popover {
   position: absolute;
   top: 84px;
-  right: 0;
-  min-height: 140px;
+  right: 8px;
+  min-height: min(62vh, 520px);
+  max-height: min(68vh, 620px);
+}
+
+.large-outline-popover {
+  width: 100%;
 }
 
 .answer-outline-item {

@@ -225,6 +225,7 @@ describe("ReaderContent", () => {
     expect(outlineShell).toHaveAttribute("aria-expanded", "true");
     const outlinePanel = screen.getByRole("navigation", { name: "正文目录" });
     expect(outlinePanel).toHaveClass("answer-outline-panel", "answer-outline-popover");
+    expect(outlinePanel).toHaveClass("large-outline-popover");
     expect(outlinePanel).toHaveTextContent("一个非常长的正文目录标题");
   });
 
