@@ -133,6 +133,27 @@ describe("WorkspaceView", () => {
     expect(props.toolbarProps.onGenerateExplanations).toHaveBeenCalledTimes(1);
   });
 
+  it("collapses and restores the project sidebar to give the reader more space", async () => {
+    const user = userEvent.setup();
+    const props = buildProps();
+
+    render(<WorkspaceView {...props} />);
+
+    const workspace = document.querySelector(".workspace");
+    expect(workspace).not.toHaveClass("sidebar-collapsed");
+    expect(screen.getByRole("complementary", { name: "项目目录" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "收起项目目录" }));
+
+    expect(workspace).toHaveClass("sidebar-collapsed");
+    expect(screen.queryByRole("complementary", { name: "项目目录" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "展开项目目录" }));
+
+    expect(workspace).not.toHaveClass("sidebar-collapsed");
+    expect(screen.getByRole("complementary", { name: "项目目录" })).toBeInTheDocument();
+  });
+
   it("marks the workspace hidden behind settings and renders reader context menu", () => {
     const props = buildProps({
       contextMenuProps: {

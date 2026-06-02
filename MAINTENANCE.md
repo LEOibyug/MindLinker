@@ -12,6 +12,12 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Collapsible Project Sidebar
+
+- Added a collapsed state for the project sidebar so the reader can use more horizontal space.
+- The collapsed sidebar leaves a narrow restore rail and does not render the project directory content until reopened.
+- Added workspace coverage for collapsing and restoring the sidebar.
+
 ### 2026-06-02 - Floating Answer Outline
 
 - Added a collapsed-by-default floating outline inside the reader for generated answers with Markdown headings.
