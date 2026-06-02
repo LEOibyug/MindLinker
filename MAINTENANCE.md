@@ -12,6 +12,18 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Reference Parse Inspector Tool
+
+- Added a standalone reference-inspection CLI that accepts a local file and exports the parsed MindLinker reference structure as Markdown or JSON.
+- The report includes document metadata, diagnostics, page-level extracted text, image placeholders, separately citable image assets, model reference XML, and OpenAI input parts preview.
+- Verified the tool with a local InfoTheory PDF and a Markdown sample.
+- Verification:
+  - `npm run inspect:reference -- /Users/rhetoric/Work/InfoTheory/哈工深-Lecture4-AEP-IDD.pdf --out temp/lecture4-reference.md --max-page-chars 1600`
+  - `npm run inspect:reference -- temp/sample-reference.md --out temp/sample-reference-report.md`
+  - `npx tsc --noEmit`
+  - `npm test -- --run`
+  - `npm run build`
+
 ### 2026-06-02 - Interaction Report Export Tool
 
 - Added a standalone Markdown export tool for inspecting model calls, runtime logs, persisted conversations, inline questions, parsed references, and reference images outside the app UI.

@@ -213,6 +213,7 @@ npm run build
 - `npm run test:watch`：以 watch 模式运行 Vitest。
 - `npm run build`：执行 TypeScript 检查并构建渲染端。
 - `npm run export:interactions`：导出模型互动与本地解析报告，默认整理最近一个对话，输出 Markdown。
+- `npm run inspect:reference`：解析单个参考文件，并导出应用可见的参考结构报告。
 
 调试模型阅读流程时，可以运行：
 
@@ -221,6 +222,14 @@ npm run export:interactions -- --out temp/latest-interaction.md
 ```
 
 这个工具不属于应用界面，只用于开发和问题复盘。它会读取 Electron 本地运行日志，并尽量拼接本地项目、对话、参考解析结果、位置提问和模型回复。需要查看全部记录时可加 `--all`；需要指定范围时可使用 `--conversation-id`、`--project-id`、`--since` 或 `--message`。
+
+查看某个参考文件解析后的样子，可以运行：
+
+```bash
+npm run inspect:reference -- /path/to/reference.pdf --out temp/reference-report.md
+```
+
+该工具会展示页级文本、图片输入占位、可引用图片资产、模型上下文 XML 和 OpenAI input parts 预览。它在 Node 环境下运行，PDF 页面截图没有浏览器 canvas 支持时会显示占位图；应用内真实导入仍会按桌面窗口环境尝试渲染页面图片。
 
 维护记录见 [MAINTENANCE.md](MAINTENANCE.md)。修复 bug 时应尽量包含聚焦的回归测试、验证命令和清晰的 git 提交信息。
 
