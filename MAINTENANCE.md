@@ -12,6 +12,12 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Test Suite Pruning
+
+- Removed redundant App-level UI coverage that duplicated focused component and hook tests.
+- Kept cross-layer regression tests for generation, persistence, provider requests, reference handling, explanation behavior, and graph safety.
+- Reduced the main App suite from 128 to 121 tests while keeping targeted component coverage in place.
+
 ### 2026-06-02 - Explanation Panel Title Copy
 
 - Renamed the right explanation panel title from "解释链" to "解释项" to better describe the visible list/card content.

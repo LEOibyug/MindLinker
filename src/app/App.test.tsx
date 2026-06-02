@@ -51,38 +51,6 @@ const seedExistingProjects = () => {
   window.localStorage.setItem("mindlinker.projects", JSON.stringify(seededProjects));
 };
 
-const seedVectorStores = () => {
-  window.localStorage.setItem(
-    "mindlinker.vectorStores",
-    JSON.stringify([
-      {
-        id: "vectors-loss-functions-v1",
-        name: "分布距离与损失函数 / 课程资料",
-        projectId: "loss-functions",
-        documentIds: [],
-        embeddingEndpoint: "https://api.openai.com/v1/embeddings",
-        embeddingModelId: "text-embedding-3-large",
-        dimensions: 3072,
-        chunkCount: 24,
-        sizeMb: 18.4,
-        updatedAt: "2026-05-27 19:20"
-      },
-      {
-        id: "vectors-attention-draft",
-        name: "Transformer 注意力机制 / 截图草稿",
-        projectId: "attention",
-        documentIds: [],
-        embeddingEndpoint: "http://127.0.0.1:11434/v1/embeddings",
-        embeddingModelId: "nomic-embed-text",
-        dimensions: 768,
-        chunkCount: 0,
-        sizeMb: 0.6,
-        updatedAt: "2026-05-27 18:47"
-      }
-    ])
-  );
-};
-
 const renderWithSeededProjects = () => {
   seedExistingProjects();
   render(<App />);
@@ -1328,17 +1296,6 @@ describe("MindLinker shell", () => {
     expect(screen.getByText("chapter.pdf")).toBeInTheDocument();
     expect(screen.queryByText("解析失败 · 查看控制台诊断")).not.toBeInTheDocument();
     expect(screen.queryByText(/随请求发送给模型 · 1 页/)).not.toBeInTheDocument();
-  });
-
-  it("renders the reader-centered workspace", async () => {
-    renderWithSeededProjects();
-    fireEvent.change(screen.getByLabelText("学习问题"), { target: { value: "开始学习" } });
-    fireEvent.click(screen.getByRole("button", { name: "开始学习" }));
-
-    expect(screen.getByRole("banner", { name: "MindLinker" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("complementary", { name: "项目目录" })).toBeInTheDocument());
-    expect(screen.getByRole("main", { name: "阅读区" })).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: "解释与来源" })).toBeInTheDocument();
   });
 
   it("keeps the explanation panel empty until the user opens a term", async () => {
@@ -3005,24 +2962,6 @@ describe("MindLinker shell", () => {
     expect(screen.getByRole("status")).toHaveTextContent("已删除当前学习项目");
   });
 
-  it("shows each project as a folder with reference and conversation groups", async () => {
-    const user = userEvent.setup();
-    renderWithSeededProjects();
-    await enterWorkspace(user);
-
-    const activeFolder = screen.getByRole("treeitem", { name: /分布距离与损失函数/ });
-
-    expect(activeFolder).toHaveClass("active");
-    expect(screen.getByRole("group", { name: "分布距离与损失函数 参考" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "分布距离与损失函数 对话" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "新建对话" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("treeitem", { name: /Transformer 注意力机制/ }));
-
-    expect(screen.getByRole("treeitem", { name: /Transformer 注意力机制/ })).toHaveClass("active");
-    expect(screen.getByRole("button", { name: "对话 Scaled dot-product attention" })).toHaveClass("active");
-  });
-
   it("creates a new conversation in the active project and inherits all project references", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -3896,21 +3835,6 @@ describe("MindLinker shell", () => {
     expect(screen.queryByLabelText("参考变更时自动更新解释链")).not.toBeInTheDocument();
   });
 
-  it("configures RAG and embedding API settings", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getByRole("button", { name: "打开设置" }));
-    await user.click(screen.getByLabelText("开启 RAG"));
-    await user.clear(screen.getByLabelText("向量化 API 接口"));
-    await user.type(screen.getByLabelText("向量化 API 接口"), "http://localhost:11434/v1/embeddings");
-    await user.type(screen.getByLabelText("向量化 API Key"), "local-token");
-
-    expect(screen.getByText("已开启")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("http://localhost:11434/v1/embeddings")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("local-token")).toBeInTheDocument();
-  });
-
   it("adds edits and deletes custom API providers", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -3970,50 +3894,6 @@ describe("MindLinker shell", () => {
     );
   });
 
-  it("lets custom providers choose between OpenAI compatible and Responses API formats", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getByRole("button", { name: "打开设置" }));
-
-    expect(screen.getByLabelText("自定义兼容接口 API 格式")).toHaveValue("openai-compatible");
-
-    await user.selectOptions(screen.getByLabelText("自定义兼容接口 API 格式"), "openai-responses");
-
-    expect(screen.getByLabelText("自定义兼容接口 API 格式")).toHaveValue("openai-responses");
-    expect(screen.getByText("Responses API 使用 /responses 请求结构")).toBeInTheDocument();
-  });
-
-  it("keeps provider models focused on main models while embedding stays in RAG settings", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(screen.getByRole("button", { name: "打开设置" }));
-    await user.click(screen.getByRole("button", { name: "添加自定义供应商" }));
-
-    const providerNameInput = screen.getByDisplayValue("自定义供应商");
-    await user.clear(providerNameInput);
-    await user.type(providerNameInput, "课程实验网关");
-    await user.click(screen.getByRole("button", { name: "为 课程实验网关 添加模型" }));
-
-    const modelNameInput = screen.getByDisplayValue("custom-model");
-    await user.clear(modelNameInput);
-    await user.type(modelNameInput, "gateway-main");
-
-    expect(screen.getByDisplayValue("gateway-main")).toBeInTheDocument();
-    expect(screen.getAllByText("主模型")).not.toHaveLength(0);
-    expect(screen.queryByLabelText(/gateway-main 用途/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "嵌入模型" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("RAG Embedding 模型")).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "聊天模型" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "解释模型" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "重写模型" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "删除模型 gateway-main" }));
-
-    expect(screen.queryByDisplayValue("gateway-main")).not.toBeInTheDocument();
-  });
-
   it("uses a configured main provider without requiring an API key", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.spyOn(window, "fetch").mockResolvedValue({
@@ -4046,18 +3926,6 @@ describe("MindLinker shell", () => {
         headers: expect.not.objectContaining({ Authorization: expect.any(String) })
       })
     );
-  });
-
-  it("shows settings as a full-page workspace instead of a narrow strip", async () => {
-    const user = userEvent.setup();
-    const { container } = render(<App />);
-
-    await user.click(screen.getByRole("button", { name: "打开设置" }));
-
-    expect(screen.getByRole("main", { name: "设置" })).toHaveClass("settings-page");
-    expect(container.querySelector(".settings-layout")).toBeInTheDocument();
-    expect(container.querySelector(".settings-main-panel")).toBeInTheDocument();
-    expect(container.querySelector(".settings-side-panel")).toBeInTheDocument();
   });
 
   it("offers provider and model test buttons with connection feedback", async () => {
@@ -4118,29 +3986,6 @@ describe("MindLinker shell", () => {
     await user.click(screen.getByRole("button", { name: "测试供应商 自定义兼容接口" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("自定义兼容接口 连接失败：401 Unauthorized"));
-  });
-
-  it("manages local vector stores", async () => {
-    const user = userEvent.setup();
-    seedExistingProjects();
-    seedVectorStores();
-    render(<App />);
-    await enterWorkspace(user);
-
-    await user.click(screen.getByRole("button", { name: "管理向量库" }));
-
-    expect(screen.getByRole("dialog", { name: "本地向量库" })).toBeInTheDocument();
-    expect(screen.getByText("分布距离与损失函数 / 课程资料")).toBeInTheDocument();
-    expect(screen.getByText("Transformer 注意力机制 / 截图草稿")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "清理向量库 Transformer 注意力机制 / 截图草稿" }));
-
-    expect(screen.queryByText("Transformer 注意力机制 / 截图草稿")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "重建当前项目索引" }));
-
-    expect(screen.getByText("分布距离与损失函数 / 当前参考")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已重建当前项目索引");
   });
 
   it("persists RAG settings locally", async () => {
