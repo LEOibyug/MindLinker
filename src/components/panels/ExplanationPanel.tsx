@@ -46,7 +46,7 @@ export function ExplanationPanel({
     <aside className="explanation-panel" aria-label="解释与来源">
       <div className="panel-title">
         <Network aria-hidden="true" size={17} />
-        <h2>解释链</h2>
+        <h2>解释项</h2>
       </div>
       <div className="panel-segmented-control" role="group" aria-label="解释面板视图">
         <button className={mode === "chain" ? "active" : ""} type="button" onClick={() => onModeChange("chain")}>

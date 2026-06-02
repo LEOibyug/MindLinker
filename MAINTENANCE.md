@@ -12,6 +12,10 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Explanation Panel Title Copy
+
+- Renamed the right explanation panel title from "解释链" to "解释项" to better describe the visible list/card content.
+
 ### 2026-06-02 - Reader Main Answer Search
 
 - Replaced the static toolbar search placeholder with a real search box for the current generated answer.
