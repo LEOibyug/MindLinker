@@ -85,7 +85,11 @@ const AnswerOutline = ({ answerMarkdown }: AnswerOutlineProps) => {
   };
 
   return (
-    <aside className={`answer-outline-float ${open ? "open" : ""}`} aria-label="正文目录面板">
+    <aside
+      className={`answer-outline-overlay ${open ? "open" : ""}`}
+      aria-label="正文目录面板"
+      aria-expanded={open}
+    >
       <button
         className="answer-outline-toggle"
         type="button"
@@ -168,7 +172,7 @@ export function ReaderContent({
   const referenceImages = referenceDocuments.flatMap((document) => document.images ?? []);
 
   return (
-    <article className="answer-document" aria-label="回答正文" onContextMenu={onContextMenu}>
+    <article className="answer-document no-horizontal-scroll" aria-label="回答正文" onContextMenu={onContextMenu}>
       {generationPhase === "content" ? (
         <div className="generation-overlay" role="status" aria-label="生成回答中">
           <div className="generation-card">

@@ -12,6 +12,12 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Answer Outline Overlay Width Fix
+
+- Changed the reader outline into a sticky overlay that no longer participates in the answer document width.
+- Prevented the answer document itself from creating horizontal scrolling while preserving local scrolling for wide tables.
+- Added reader coverage for keeping the outline overlay separate from the document scroll width.
+
 ### 2026-06-02 - Collapsible Project Sidebar
 
 - Added a collapsed state for the project sidebar so the reader can use more horizontal space.

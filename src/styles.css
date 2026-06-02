@@ -1045,20 +1045,31 @@ h3 {
 
 .answer-document {
   position: relative;
-  overflow: auto;
+  overflow: hidden auto;
   padding: 52px min(9vw, 92px);
   background: #ffffff;
 }
 
-.answer-outline-float {
+.answer-document.no-horizontal-scroll {
+  overflow-x: hidden;
+}
+
+.answer-outline-overlay {
   position: sticky;
   top: 24px;
-  float: right;
   z-index: 8;
   display: grid;
   justify-items: end;
-  width: 0;
-  margin-right: -22px;
+  width: 38px;
+  max-width: calc(100% - 36px);
+  height: 0;
+  margin-left: auto;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.answer-outline-overlay.open {
+  width: min(220px, calc(100% - 36px));
 }
 
 .answer-outline-toggle {
@@ -1073,6 +1084,7 @@ h3 {
   font-size: 12px;
   font-weight: 800;
   line-height: 1.1;
+  pointer-events: auto;
   writing-mode: vertical-rl;
 }
 
@@ -1084,7 +1096,7 @@ h3 {
 .answer-outline-panel {
   display: grid;
   gap: 4px;
-  width: 220px;
+  width: 100%;
   max-height: min(52vh, 420px);
   margin-top: 8px;
   overflow: auto;
@@ -1093,6 +1105,7 @@ h3 {
   background: rgba(255, 255, 255, .97);
   box-shadow: 0 20px 54px rgba(31, 43, 68, .16);
   padding: 8px;
+  pointer-events: auto;
 }
 
 .answer-outline-item {

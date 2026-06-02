@@ -195,6 +195,37 @@ describe("ReaderContent", () => {
     expect(screen.queryByRole("navigation", { name: "正文目录" })).not.toBeInTheDocument();
   });
 
+  it("keeps the answer outline as an overlay instead of widening the reader document", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ReaderContent
+        {...baseProps}
+        activeDraft={{
+          ...generatedDraft,
+          answerMarkdown: [
+            "# 网络层",
+            "",
+            "## 一个非常长的正文目录标题用于覆盖目录宽度不会撑开正文滚动区域",
+            "正文"
+          ].join("\n")
+        }}
+      />
+    );
+
+    const documentPanel = screen.getByRole("article", { name: "回答正文" });
+    expect(documentPanel).toHaveClass("no-horizontal-scroll");
+
+    const outlineShell = screen.getByLabelText("正文目录面板");
+    expect(outlineShell).toHaveClass("answer-outline-overlay");
+    expect(outlineShell).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(screen.getByRole("button", { name: "展开正文目录" }));
+
+    expect(outlineShell).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("navigation", { name: "正文目录" })).toHaveTextContent("一个非常长的正文目录标题");
+  });
+
   it("renders reference update and rewrite controls with callbacks", async () => {
     const user = userEvent.setup();
     const onApplyReferencePatch = vi.fn();
