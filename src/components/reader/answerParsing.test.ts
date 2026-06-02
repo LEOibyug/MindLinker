@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeMathExpression, parseAnswerBlocks } from "./answerParsing";
+import { buildAnswerHeadingOutline, normalizeMathExpression, parseAnswerBlocks } from "./answerParsing";
 
 describe("answerParsing", () => {
   it("parses markdown tables and formula blocks without leaking wrappers", () => {
@@ -57,6 +57,26 @@ describe("answerParsing", () => {
       { kind: "text", text: "192.168.1.1" },
       { kind: "text", text: "\n对应十进制就是：255.255.224.0\n\nCIDR 地址格式为：\n" },
       { kind: "text", text: "a.b.c.d/x" }
+    ]);
+  });
+
+  it("builds a stable outline from markdown headings", () => {
+    const outline = buildAnswerHeadingOutline(
+      [
+        "# 网络层",
+        "正文",
+        "## **路由算法**",
+        "### $Dijkstra$ 算法",
+        "#### 不进入目录",
+        "## 路由算法"
+      ].join("\n")
+    );
+
+    expect(outline).toEqual([
+      { id: "网络层", level: 1, text: "网络层" },
+      { id: "路由算法", level: 2, text: "路由算法" },
+      { id: "dijkstra-算法", level: 3, text: "Dijkstra 算法" },
+      { id: "路由算法-2", level: 2, text: "路由算法" }
     ]);
   });
 });

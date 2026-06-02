@@ -3,6 +3,12 @@ export type AnswerBlock =
   | { kind: "formula"; text: string }
   | { kind: "table"; rows: string[][] };
 
+export type AnswerHeadingOutlineItem = {
+  id: string;
+  level: 1 | 2 | 3;
+  text: string;
+};
+
 type FenceMode = "formula" | "text" | null;
 
 const stripFormulaWrapperQuotes = (value: string) =>
@@ -55,6 +61,50 @@ const normalizeMathLine = (line: string) => normalizeMathExpression(line);
 const isMarkdownHeadingLine = (line: string) => /^#{1,6}\s+\S/.test(line.trim());
 
 export const isMarkdownListLine = (line: string) => /^[-*]\s+\S/.test(line.trim()) || /^\d+[.)]\s+\S/.test(line.trim());
+
+const stripHeadingInlineSyntax = (value: string) =>
+  value
+    .replace(referenceImageTagPattern, "")
+    .replace(/\[\[\/?ml(?::[^\]]+)?\]\]/g, "")
+    .replace(/<ref-image\s+id=["'][^"']+["']\s*\/?>/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\$([^$\n]+)\$/g, "$1")
+    .replace(/\\\(([\s\S]+?)\\\)/g, "$1")
+    .trim();
+
+const referenceImageTagPattern = /(\[\[ref-image:([A-Za-z0-9_.:-]+)\]\]|<ref-image\s+id=["']([A-Za-z0-9_.:-]+)["']\s*\/?>)/g;
+
+const slugifyHeading = (text: string, fallbackIndex: number) => {
+  const slug = text
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || `section-${fallbackIndex + 1}`;
+};
+
+export const buildAnswerHeadingOutline = (text: string): AnswerHeadingOutlineItem[] => {
+  const seen = new Map<string, number>();
+  return text
+    .split(/\n/)
+    .map((line) => line.trim().match(/^(#{1,3})\s+(.+)$/))
+    .filter((match): match is RegExpMatchArray => Boolean(match))
+    .map((match, index) => {
+      const level = match[1].length as 1 | 2 | 3;
+      const headingText = stripHeadingInlineSyntax(match[2]);
+      const baseId = slugifyHeading(headingText, index);
+      const count = seen.get(baseId) ?? 0;
+      seen.set(baseId, count + 1);
+      return {
+        id: count === 0 ? baseId : `${baseId}-${count + 1}`,
+        level,
+        text: headingText
+      };
+    })
+    .filter((item) => item.text.length > 0);
+};
 
 const looksLikeExplanatoryText = (line: string) => /[\u4e00-\u9fff]{2,}|[，。；：、]/.test(line);
 

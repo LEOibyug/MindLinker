@@ -12,6 +12,13 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Floating Answer Outline
+
+- Added a collapsed-by-default floating outline inside the reader for generated answers with Markdown headings.
+- The outline parses `#`, `##`, and `###` headings, creates stable heading ids, and scrolls to the matching section when clicked.
+- Kept the outline as an overlay so the reader layout and explanation panel do not reflow.
+- Added tests for heading outline parsing, collapsed/expanded reader behavior, and heading scroll actions.
+
 ### 2026-06-02 - Complete Text Context With Visual Reference Tools
 
 - Changed tool-style reference reading so main answers and inline questions receive all extracted reference text by default.

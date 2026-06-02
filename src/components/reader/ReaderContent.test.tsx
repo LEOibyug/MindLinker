@@ -156,6 +156,45 @@ describe("ReaderContent", () => {
     expect(screen.queryByText("[[ref-image:doc-a-image-1]]")).not.toBeInTheDocument();
   });
 
+  it("renders a collapsed floating outline and scrolls to headings when opened", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    render(
+      <ReaderContent
+        {...baseProps}
+        activeDraft={{
+          ...generatedDraft,
+          answerMarkdown: [
+            "# 网络层",
+            "",
+            "## 路由算法",
+            "正文",
+            "",
+            "### Dijkstra 算法",
+            "正文"
+          ].join("\n")
+        }}
+      />
+    );
+
+    expect(screen.queryByRole("navigation", { name: "正文目录" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "展开正文目录" }));
+
+    const outline = screen.getByRole("navigation", { name: "正文目录" });
+    expect(outline).toHaveTextContent("网络层");
+    expect(outline).toHaveTextContent("路由算法");
+    expect(outline).toHaveTextContent("Dijkstra 算法");
+
+    await user.click(screen.getByRole("button", { name: "跳转到 Dijkstra 算法" }));
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
+
+    await user.click(screen.getByRole("button", { name: "收起正文目录" }));
+    expect(screen.queryByRole("navigation", { name: "正文目录" })).not.toBeInTheDocument();
+  });
+
   it("renders reference update and rewrite controls with callbacks", async () => {
     const user = userEvent.setup();
     const onApplyReferencePatch = vi.fn();

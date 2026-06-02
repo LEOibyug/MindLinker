@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { renderAnswerText, renderAnswerWithInlineConversations } from "./answerRendering";
 import type { ConversationDraft } from "../../domain/conversationDrafts";
@@ -9,6 +10,7 @@ import type { InlineConversation } from "../../domain/inlineConversations";
 import { getInlineConversationAnchorText } from "../../domain/inlineConversations";
 import { KnowledgeGraphView } from "./KnowledgeGraphView";
 import type { ReaderViewMode } from "./ReaderControls";
+import { buildAnswerHeadingOutline } from "./answerParsing";
 
 export type GenerationPhase = "idle" | "content" | "annotations" | "ready";
 
@@ -65,6 +67,52 @@ const GraphErrorPanel = () => (
     <p>当前对话内容仍然可用。已记录错误信息，可以切回阅读器继续查看正文。</p>
   </section>
 );
+
+type AnswerOutlineProps = {
+  answerMarkdown: string;
+};
+
+const AnswerOutline = ({ answerMarkdown }: AnswerOutlineProps) => {
+  const [open, setOpen] = useState(false);
+  const outline = useMemo(() => buildAnswerHeadingOutline(answerMarkdown), [answerMarkdown]);
+
+  if (outline.length === 0) {
+    return null;
+  }
+
+  const jumpToHeading = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
+
+  return (
+    <aside className={`answer-outline-float ${open ? "open" : ""}`} aria-label="正文目录面板">
+      <button
+        className="answer-outline-toggle"
+        type="button"
+        aria-label={open ? "收起正文目录" : "展开正文目录"}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        目录
+      </button>
+      {open ? (
+        <nav className="answer-outline-panel" aria-label="正文目录">
+          {outline.map((item) => (
+            <button
+              className={`answer-outline-item level-${item.level}`}
+              key={item.id}
+              type="button"
+              aria-label={`跳转到 ${item.text}`}
+              onClick={() => jumpToHeading(item.id)}
+            >
+              {item.text}
+            </button>
+          ))}
+        </nav>
+      ) : null}
+    </aside>
+  );
+};
 
 export function ReaderContent({
   activeDraft,
@@ -140,6 +188,7 @@ export function ReaderContent({
         <div className="draft-answer">
           {activeDraft.modelStatus === "generated" && activeDraft.answerMarkdown ? (
             <>
+              <AnswerOutline answerMarkdown={activeDraft.answerMarkdown} />
               {renderAnswerWithInlineConversations(
                 activeDraft.answerMarkdown,
                 renderedConversationExplanations,

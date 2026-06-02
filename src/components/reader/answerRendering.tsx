@@ -8,7 +8,7 @@ import type { InlineConversation, InlineConversationMarkerBinding } from "../../
 import { getInlineConversationAnchorText } from "../../domain/inlineConversations";
 import type { ReferenceImageAsset } from "../../services/pdfReferences";
 import { normalizePlainTextForAnchor } from "../../domain/textAnchors";
-import { isMarkdownListLine, normalizeMathExpression, parseAnswerBlocks } from "./answerParsing";
+import { buildAnswerHeadingOutline, isMarkdownListLine, normalizeMathExpression, parseAnswerBlocks } from "./answerParsing";
 
 type RenderInlineConversationMarker = (
   conversation: InlineConversation,
@@ -224,6 +224,8 @@ export const renderAnswerText = (
 ) => {
   const textBoundTerms = bindExplanationsToAnswerText(text, terms);
   const blocks = parseAnswerBlocks(text);
+  const headingOutline = buildAnswerHeadingOutline(text);
+  let headingIndex = 0;
   const elements: ReactNode[] = [];
   let listItems: { id: number; content: ReactNode }[] = [];
   let listItemIndex = 0;
@@ -406,6 +408,10 @@ export const renderAnswerText = (
         const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
         if (headingMatch) {
           const headingText = headingMatch[2];
+          const headingId = headingOutline[headingIndex]?.id;
+          if (headingMatch[1].length <= 3) {
+            headingIndex += 1;
+          }
           const lineMarkers = [...getMarkersForText(headingText), ...getLegacyMarkersForText(headingText)];
           const level = headingMatch[1].length;
           const content = renderInlineAnswerWithTerms(
@@ -420,7 +426,7 @@ export const renderAnswerText = (
           );
           if (level === 1) {
             elements.push(
-              <h1 key={`h1-${elements.length}`}>
+              <h1 id={headingId} key={`h1-${elements.length}`}>
                 {content}
                 {renderLineEndMarkers(lineMarkers, `h1-${elements.length}`)}
               </h1>
@@ -429,7 +435,7 @@ export const renderAnswerText = (
           }
           if (level === 2) {
             elements.push(
-              <h2 key={`h2-${elements.length}`}>
+              <h2 id={headingId} key={`h2-${elements.length}`}>
                 {content}
                 {renderLineEndMarkers(lineMarkers, `h2-${elements.length}`)}
               </h2>
@@ -437,7 +443,7 @@ export const renderAnswerText = (
             return;
           }
           elements.push(
-            <h3 key={`h3-${elements.length}`} className={level >= 4 ? "minor-heading" : undefined}>
+            <h3 id={level <= 3 ? headingId : undefined} key={`h3-${elements.length}`} className={level >= 4 ? "minor-heading" : undefined}>
               {content}
               {renderLineEndMarkers(lineMarkers, `h3-${elements.length}`)}
             </h3>

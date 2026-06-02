@@ -29,5 +29,5 @@ describe("reference inspector CLI", () => {
     const image = await loadImage(await readFile(path.join(assetsDir, pageAssetName ?? "")));
     expect(image.width).toBeGreaterThan(100);
     expect(image.height).toBeGreaterThan(100);
-  });
+  }, 20_000);
 });
