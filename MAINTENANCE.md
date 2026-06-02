@@ -12,6 +12,19 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Interaction Report Export Tool
+
+- Added a standalone Markdown export tool for inspecting model calls, runtime logs, persisted conversations, inline questions, parsed references, and reference images outside the app UI.
+- The default export scope is now the latest main conversation, with `--all` available for full history exports.
+- Added filters for project id, conversation id, date range, and log message text.
+- The tool can optionally extract data-url reference images into a sibling assets folder.
+- Verification:
+  - `npm run export:interactions -- --out temp/interaction-report-latest.md`
+  - `npm run export:interactions -- --all --out temp/interaction-report-all.md`
+  - `npx tsc --noEmit`
+  - `npm test -- --run`
+  - `npm run build`
+
 ### 2026-06-02 - Multi-Round Reference Reading And Delete Confirmation Timeout
 
 - Let the reference-reading planner run multiple rounds before the final model answer, so the model can decide whether it needs to keep reading instead of stopping after one page-selection pass.

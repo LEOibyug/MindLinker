@@ -9,6 +9,7 @@
     "dev:renderer": "vite --host 127.0.0.1",
     "dev:electron": "wait-on http://127.0.0.1:5173 && VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
     "start:desktop": "npm run build && electron .",
+    "export:interactions": "node tools/export-interaction-report.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
