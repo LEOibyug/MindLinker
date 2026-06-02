@@ -12,6 +12,12 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Answer Outline Popover Height Fix
+
+- Fixed the reader outline panel being compressed into a thin strip after the no-horizontal-scroll overlay change.
+- The outline list is now an absolute popover under the vertical toggle, so the shell can stay zero-height without clipping the panel.
+- Tightened reader coverage to require the popover structure.
+
 ### 2026-06-02 - Answer Outline Overlay Width Fix
 
 - Changed the reader outline into a sticky overlay that no longer participates in the answer document width.

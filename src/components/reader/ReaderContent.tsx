@@ -100,7 +100,7 @@ const AnswerOutline = ({ answerMarkdown }: AnswerOutlineProps) => {
         目录
       </button>
       {open ? (
-        <nav className="answer-outline-panel" aria-label="正文目录">
+        <nav className="answer-outline-panel answer-outline-popover" aria-label="正文目录">
           {outline.map((item) => (
             <button
               className={`answer-outline-item level-${item.level}`}

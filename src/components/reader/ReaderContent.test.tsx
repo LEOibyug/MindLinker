@@ -223,7 +223,9 @@ describe("ReaderContent", () => {
     await user.click(screen.getByRole("button", { name: "展开正文目录" }));
 
     expect(outlineShell).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("navigation", { name: "正文目录" })).toHaveTextContent("一个非常长的正文目录标题");
+    const outlinePanel = screen.getByRole("navigation", { name: "正文目录" });
+    expect(outlinePanel).toHaveClass("answer-outline-panel", "answer-outline-popover");
+    expect(outlinePanel).toHaveTextContent("一个非常长的正文目录标题");
   });
 
   it("renders reference update and rewrite controls with callbacks", async () => {
