@@ -1,6 +1,8 @@
 export type InlineConversationMessage = {
   role: "user" | "assistant";
   content: string;
+  error?: boolean;
+  retryQuestion?: string;
 };
 
 export type InlineConversation = {

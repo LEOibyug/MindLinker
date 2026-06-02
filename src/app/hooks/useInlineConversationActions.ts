@@ -85,13 +85,8 @@ export const useInlineConversationActions = ({
     });
   };
 
-  const sendInlineQuestion = async (rawQuestion?: string) => {
+  const submitInlineQuestion = async (question: string, previousMessages: InlineConversationMessage[]) => {
     const draftSnapshot = inlineConversationDraft;
-    const question = rawQuestion?.trim() ?? draftSnapshot?.question.trim() ?? "";
-    if (!question) {
-      setNotice("请输入要提问的内容");
-      return;
-    }
     if (!draftSnapshot) {
       return;
     }
@@ -100,7 +95,6 @@ export const useInlineConversationActions = ({
       setNotice("请在设置中配置可用的主模型 API");
       return;
     }
-    const previousMessages = draftSnapshot.messages;
     const nextMessages: InlineConversationMessage[] = [...previousMessages, { role: "user", content: question }];
     setInlineConversationDraft((draft) => (draft ? { ...draft, question: "", messages: [...nextMessages, { role: "assistant", content: "" }] } : draft));
     setInlineQuestionPending(true);
@@ -136,11 +130,48 @@ export const useInlineConversationActions = ({
       const message = error instanceof Error ? error.message : String(error);
       setNotice(message);
       setInlineConversationDraft((draft) =>
-        draft ? { ...draft, messages: [...nextMessages, { role: "assistant", content: message }] } : draft
+        draft
+          ? {
+              ...draft,
+              messages: [...nextMessages, { role: "assistant", content: message, error: true, retryQuestion: question }]
+            }
+          : draft
       );
     } finally {
       setInlineQuestionPending(false);
     }
+  };
+
+  const sendInlineQuestion = async (rawQuestion?: string) => {
+    const draftSnapshot = inlineConversationDraft;
+    const question = rawQuestion?.trim() ?? draftSnapshot?.question.trim() ?? "";
+    if (!question) {
+      setNotice("请输入要提问的内容");
+      return;
+    }
+    if (!draftSnapshot) {
+      return;
+    }
+    await submitInlineQuestion(question, draftSnapshot.messages);
+  };
+
+  const retryInlineQuestion = async (messageIndex: number) => {
+    const draftSnapshot = inlineConversationDraft;
+    if (!draftSnapshot) {
+      return;
+    }
+    const failedMessage = draftSnapshot.messages[messageIndex];
+    const userMessage = draftSnapshot.messages[messageIndex - 1];
+    if (!failedMessage?.error || failedMessage.role !== "assistant" || userMessage?.role !== "user") {
+      setNotice("没有找到可重试的位置提问");
+      return;
+    }
+    const question = failedMessage.retryQuestion?.trim() || userMessage.content.trim();
+    if (!question) {
+      setNotice("没有找到可重试的问题内容");
+      return;
+    }
+    await submitInlineQuestion(question, draftSnapshot.messages.slice(0, Math.max(0, messageIndex - 1)));
   };
 
   const saveInlineConversationDraft = () => {
@@ -179,6 +210,7 @@ export const useInlineConversationActions = ({
   return {
     insertInlineConversation,
     openInlineConversation,
+    retryInlineQuestion,
     sendInlineQuestion,
     saveInlineConversationDraft
   };

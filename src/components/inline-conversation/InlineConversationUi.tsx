@@ -9,6 +9,7 @@ type InlineConversationDialogProps = {
   notice: string | null;
   pending: boolean;
   onClose: () => void;
+  onRetry: (messageIndex: number) => void;
   onSend: (question: string) => void;
   onSave: () => void;
 };
@@ -33,7 +34,7 @@ export const renderInlineConversationMarker = (
   </button>
 );
 
-export const InlineConversationDialog = ({ draft, notice, pending, onClose, onSend, onSave }: InlineConversationDialogProps) => {
+export const InlineConversationDialog = ({ draft, notice, pending, onClose, onRetry, onSend, onSave }: InlineConversationDialogProps) => {
   const [question, setQuestion] = useState(draft.question);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -88,8 +89,23 @@ export const InlineConversationDialog = ({ draft, notice, pending, onClose, onSe
         <div className="inline-thread" aria-label="位置提问问答">
           {draft.messages.length > 0 ? (
             draft.messages.map((message, index) => (
-              <article className={`inline-thread-message ${message.role}`} key={`${message.role}-${index}-${message.content.slice(0, 12)}`}>
-                <strong>{message.role === "user" ? "提问" : "回答"}</strong>
+              <article
+                className={`inline-thread-message ${message.role} ${message.error ? "inline-thread-message-error" : ""}`}
+                key={`${message.role}-${index}-${message.content.slice(0, 12)}`}
+              >
+                <div className="inline-thread-message-header">
+                  <strong>{message.role === "user" ? "提问" : "回答"}</strong>
+                  {message.error ? (
+                    <button
+                      className="ghost-button compact-action-button inline-retry-button"
+                      type="button"
+                      disabled={pending}
+                      onClick={() => onRetry(index)}
+                    >
+                      重试
+                    </button>
+                  ) : null}
+                </div>
                 <div className="inline-thread-content">{renderAnswerText(message.content)}</div>
               </article>
             ))

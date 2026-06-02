@@ -1987,8 +1987,26 @@ h3 {
   border: 1px solid #e1e8f2;
 }
 
+.inline-thread-message-error {
+  border-color: #f3c5c5;
+  background: #fff8f8;
+}
+
+.inline-thread-message-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .inline-thread-message strong {
   color: #31415d;
+  font-size: 12px;
+}
+
+.inline-retry-button {
+  min-height: 26px;
+  padding: 0 10px;
   font-size: 12px;
 }
 
@@ -2045,6 +2063,11 @@ h3 {
 
 .dialog-actions .compact-action-button {
   padding: 0 12px;
+}
+
+.model-retry-button {
+  justify-self: start;
+  margin-top: 10px;
 }
 
 .settings-field {

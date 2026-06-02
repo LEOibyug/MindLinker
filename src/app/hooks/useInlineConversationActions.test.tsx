@@ -137,6 +137,56 @@ describe("useInlineConversationActions", () => {
     expect(updaterCalls[3](inlineDraft)?.messages.at(-1)).toEqual({ role: "assistant", content: "流式回答" });
   });
 
+  it("retries a failed inline answer without duplicating the question", async () => {
+    const inlineDraft: NonNullable<InlineConversationDraft> = {
+      anchor: "当前位置",
+      anchorOffset: 8,
+      anchorLength: 0,
+      anchorText: "当前位置",
+      positionLabel: "位置：第 9 个字符附近",
+      question: "分片偏移是什么？",
+      messages: []
+    };
+    let currentDraft: InlineConversationDraft = inlineDraft;
+    const setInlineConversationDraft = vi.fn((updater) => {
+      currentDraft = typeof updater === "function" ? updater(currentDraft) : updater;
+    });
+    vi.spyOn(window, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: "位置提问失败" } }] }), { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: "分片偏移用来表示片段在原始数据中的位置。" } }] }), { status: 200 }));
+    const { result } = renderInlineActions({
+      inlineConversationDraft: currentDraft,
+      setInlineConversationDraft
+    });
+
+    await act(async () => {
+      await result.current.sendInlineQuestion();
+    });
+
+    expect(currentDraft?.messages).toEqual([
+      { role: "user", content: "分片偏移是什么？" },
+      {
+        role: "assistant",
+        content: "位置提问请求失败：503 ",
+        error: true,
+        retryQuestion: "分片偏移是什么？"
+      }
+    ]);
+
+    const { result: retryResult } = renderInlineActions({
+      inlineConversationDraft: currentDraft,
+      setInlineConversationDraft
+    });
+    await act(async () => {
+      await retryResult.current.retryInlineQuestion(1);
+    });
+
+    expect(currentDraft?.messages).toEqual([
+      { role: "user", content: "分片偏移是什么？" },
+      { role: "assistant", content: "分片偏移用来表示片段在原始数据中的位置。" }
+    ]);
+  });
+
   it("saves a draft, clears the dialog, and applies a generated summary title", async () => {
     const inlineDraft: NonNullable<InlineConversationDraft> = {
       anchor: "当前位置",

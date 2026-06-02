@@ -80,6 +80,8 @@ export type WorkspaceContainerProps = {
   rewriteExplanation: (term: string) => Promise<void>;
   saveInlineConversationDraft: () => void;
   sendInlineQuestion: (question: string) => Promise<void>;
+  retryActiveConversation: () => void;
+  retryInlineQuestion: (messageIndex: number) => Promise<void>;
   setContextMenu: StateSetter<ReaderContextMenuState>;
   setEditingTitle: StateSetter<boolean>;
   setExplanationPanelMode: StateSetter<"chain" | "summary">;
@@ -158,6 +160,8 @@ export function WorkspaceContainer({
   rewriteExplanation,
   saveInlineConversationDraft,
   sendInlineQuestion,
+  retryActiveConversation,
+  retryInlineQuestion,
   setContextMenu,
   setEditingTitle,
   setExplanationPanelMode,
@@ -336,6 +340,7 @@ export function WorkspaceContainer({
           onExplanationOpen: openExplanation,
           onGraphError: handleGraphError,
           onInlineConversationOpen: openInlineConversation,
+          onRetryGeneration: retryActiveConversation,
           renderInlineConversationMarker
         }}
         contextMenuProps={
@@ -375,6 +380,7 @@ export function WorkspaceContainer({
           notice={notice}
           pending={inlineQuestionPending}
           onClose={() => setInlineConversationDraft(null)}
+          onRetry={(messageIndex) => void retryInlineQuestion(messageIndex)}
           onSend={(question) => void sendInlineQuestion(question)}
           onSave={saveInlineConversationDraft}
         />

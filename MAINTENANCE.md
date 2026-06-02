@@ -12,6 +12,22 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Failed Request Retry And Title Recovery
+
+- Added real retry actions for failed main-answer generation and failed inline position questions.
+- Inline question retries reuse the failed question and replace the failed answer slot, avoiding duplicate question entries.
+- Title generation now retries in the background after main-answer completion when the parallel title request fails, which is more robust with tool-style reference reading and provider 502/503 errors.
+- Generated titles are also applied to visible drafts so the reader and sidebar stay in sync.
+- Regression coverage:
+  - failed inline question answers expose retry metadata and retry without duplicating the user question;
+  - failed reader drafts show a working `重试生成` action;
+  - title generation can recover after an initial title request failure.
+- Verification:
+  - `npm test -- --run src/app/hooks/useInlineConversationActions.test.tsx src/components/reader/ReaderContent.test.tsx src/app/hooks/useConversationGeneration.test.tsx`
+  - `npx tsc --noEmit`
+  - `npm test -- --run`
+  - `npm run build`
+
 ### 2026-05-29 - Search Miss Prompt Guardrail
 
 - Clarified the reference search/tool prompts so the model treats empty search results as an extraction/search limitation, not proof that the references lack relevant content.

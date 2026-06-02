@@ -127,7 +127,7 @@ export const useConversationGeneration = ({
     const applyGeneratedTitle = (title: string) => {
       const cleanTitle = sanitizeProjectTitle(title);
       if (!cleanTitle) {
-        return;
+        return false;
       }
       if (isFirstProjectConversation) {
         setProjectTitles((titles) => ({ ...titles, [projectId]: cleanTitle }));
@@ -156,6 +156,38 @@ export const useConversationGeneration = ({
             }
           : drafts
       );
+      setVisibleConversationDrafts((drafts) =>
+        drafts[conversationId]
+          ? {
+              ...drafts,
+              [conversationId]: {
+                ...drafts[conversationId],
+                title: cleanTitle
+              }
+            }
+          : drafts
+      );
+      return true;
+    };
+    const requestAndApplyGeneratedTitle = async (phase: "parallel" | "retry") => {
+      try {
+        const title = await requestProjectTitle(
+          draft.prompt,
+          draft.referenceTitles,
+          documents,
+          chatConfig.provider,
+          chatConfig.model,
+          {
+            projectTitle: projectSnapshot?.title,
+            conversationTitle: conversationSnapshot?.title ?? draft.title
+          }
+        );
+        return applyGeneratedTitle(title);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logDebugMessage(phase === "parallel" ? `标题生成失败，稍后重试：${message}` : `标题重试失败：${message}`);
+        return false;
+      }
     };
 
     markConversationRunning(conversationId, "generating-content");
@@ -207,19 +239,7 @@ export const useConversationGeneration = ({
         },
         runtimeContext
       );
-      const titlePromise = requestProjectTitle(
-        draft.prompt,
-        draft.referenceTitles,
-        documents,
-        chatConfig.provider,
-        chatConfig.model,
-        {
-          projectTitle: projectSnapshot?.title,
-          conversationTitle: conversationSnapshot?.title ?? draft.title
-        }
-      )
-        .then(applyGeneratedTitle)
-        .catch((error) => logDebugMessage(error instanceof Error ? error.message : String(error)));
+      const titlePromise = requestAndApplyGeneratedTitle("parallel");
       const [answerMarkdown] = await Promise.all([
         answerPromise,
         waitForMinimumGenerationFrame()
@@ -260,7 +280,11 @@ export const useConversationGeneration = ({
       }
       foregroundGeneration = false;
       logDebugMessage("模型主回复生成完成");
-      void titlePromise;
+      void titlePromise.then((applied) => {
+        if (!applied) {
+          void requestAndApplyGeneratedTitle("retry");
+        }
+      });
       markConversationSettled(conversationId, "ready");
       delete streamingLogStateRef.current[conversationId];
     } catch (error) {

@@ -179,6 +179,29 @@ describe("ReaderContent", () => {
     expect(screen.getByDisplayValue("请结合参考重写这段内容")).toBeInTheDocument();
   });
 
+  it("offers a real retry action when answer generation fails", async () => {
+    const user = userEvent.setup();
+    const onRetryGeneration = vi.fn();
+
+    render(
+      <ReaderContent
+        {...baseProps}
+        activeDraft={{
+          ...generatedDraft,
+          answerMarkdown: "生成失败，可以重试。",
+          modelStatus: "failed",
+          modelError: "主回复请求失败：503",
+          generated: false
+        }}
+        onRetryGeneration={onRetryGeneration}
+      />
+    );
+
+    expect(screen.getByRole("note")).toHaveTextContent("主回复请求失败：503");
+    await user.click(screen.getByRole("button", { name: "重试生成" }));
+    expect(onRetryGeneration).toHaveBeenCalledTimes(1);
+  });
+
   it("renders graph error and new conversation branches without workspace state", () => {
     const { rerender } = render(
       <ReaderContent

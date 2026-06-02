@@ -274,6 +274,7 @@ export function App() {
   const {
     insertInlineConversation,
     openInlineConversation,
+    retryInlineQuestion,
     sendInlineQuestion,
     saveInlineConversationDraft
   } = useInlineConversationActions({
@@ -293,6 +294,14 @@ export function App() {
     setViewMode,
     logDebugMessage
   });
+
+  const retryActiveConversation = () => {
+    if (!activeDraft) {
+      setNotice("当前对话没有可重试的内容");
+      return;
+    }
+    void generateConversation(activeConversation.id, activeDraft, projectDocuments, activeProject.id);
+  };
 
   const {
     createProject,
@@ -547,6 +556,8 @@ export function App() {
         openInlineConversation={openInlineConversation}
         rebuildActiveVectorStore={rebuildActiveVectorStore}
         rewriteExplanation={rewriteExplanation}
+        retryActiveConversation={retryActiveConversation}
+        retryInlineQuestion={retryInlineQuestion}
         saveInlineConversationDraft={saveInlineConversationDraft}
         sendInlineQuestion={sendInlineQuestion}
         setContextMenu={setContextMenu}

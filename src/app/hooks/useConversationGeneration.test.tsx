@@ -182,4 +182,76 @@ describe("useConversationGeneration", () => {
     expect(setProjectTitles).toHaveBeenCalledWith(expect.any(Function));
     expect(setLocalProjects).toHaveBeenCalledWith(expect.any(Function));
   });
+
+  it("retries title generation after the parallel title request fails", async () => {
+    const setStoredConversationDrafts = vi.fn();
+    const setVisibleConversationDrafts = vi.fn();
+    const setLocalProjects = vi.fn();
+    const setProjectTitles = vi.fn();
+    let titleRequests = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = String(init?.body ?? "");
+      if (body.includes("项目标题生成任务")) {
+        titleRequests += 1;
+        if (titleRequests === 1) {
+          return new Response("title unavailable", { status: 503 });
+        }
+        return new Response(JSON.stringify({ choices: [{ message: { content: "可靠传输机制" } }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: "生成的主回复" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useConversationGeneration({
+        activeConversationId: "conversation-1",
+        activeProjectId: "project-1",
+        activeProviderId: "custom-compatible",
+        activeConversationReferenceState: "refs:empty",
+        conversationDrafts: {},
+        conversationExplanations: {},
+        customProviders: [{ ...placeholderProviders[0], baseUrl: "https://api.local.test/v1" }],
+        projectDocuments: [],
+        localProjects: [project],
+        runningConversationIds: [],
+        streamingLogStateRef: { current: {} },
+        isConversationVisible: () => true,
+        markConversationRunning: vi.fn(),
+        markConversationSettled: vi.fn(),
+        setAnnotationsRevealed: vi.fn(),
+        setAvailableExplanations: vi.fn(),
+        setConversationExplanations: vi.fn(),
+        setExplanationStack: vi.fn(),
+        setGenerationPhase: vi.fn(),
+        setLocalProjects,
+        setNotice: vi.fn(),
+        setProjectTitles,
+        setStoredConversationDrafts,
+        setVisibleConversationDrafts,
+        logDebugMessage: vi.fn()
+      })
+    );
+
+    await act(async () => {
+      await result.current.generateConversation("conversation-1", { ...draft, title: "自主学习导读" }, [], "project-1");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(titleRequests).toBe(2);
+    const titleUpdater = setStoredConversationDrafts.mock.calls.find((call) => {
+      const updater = call[0] as (drafts: Record<string, ConversationDraft>) => Record<string, ConversationDraft>;
+      return updater({ "conversation-1": { ...draft, title: "自主学习导读" } })["conversation-1"].title === "可靠传输机制";
+    })?.[0] as ((drafts: Record<string, ConversationDraft>) => Record<string, ConversationDraft>) | undefined;
+    expect(titleUpdater).toBeDefined();
+    expect(titleUpdater?.({ "conversation-1": { ...draft, title: "自主学习导读" } })["conversation-1"].title).toBe("可靠传输机制");
+    expect(setProjectTitles).toHaveBeenCalledWith(expect.any(Function));
+    expect(setLocalProjects).toHaveBeenCalledWith(expect.any(Function));
+    expect(setVisibleConversationDrafts).toHaveBeenCalledWith(expect.any(Function));
+  });
 });

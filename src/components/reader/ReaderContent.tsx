@@ -46,6 +46,7 @@ export type ReaderContentProps = {
   onExplanationOpen: (term: string) => void;
   onGraphError: (error: Error, info: ErrorInfo) => void;
   onInlineConversationOpen: (conversation: InlineConversation) => void;
+  onRetryGeneration?: () => void;
   renderInlineConversationMarker: RenderInlineConversationMarker;
 };
 
@@ -91,6 +92,7 @@ export function ReaderContent({
   onExplanationOpen,
   onGraphError,
   onInlineConversationOpen,
+  onRetryGeneration,
   renderInlineConversationMarker
 }: ReaderContentProps) {
   if (viewMode === "graph") {
@@ -153,6 +155,11 @@ export function ReaderContent({
             <div className="model-state-panel" role="note">
               <strong>{activeDraft.modelError ?? "需要配置模型"}</strong>
               {renderAnswerText(activeDraft.answerMarkdown)}
+              {activeDraft.modelStatus === "failed" && onRetryGeneration ? (
+                <button className="primary-button model-retry-button" type="button" onClick={onRetryGeneration}>
+                  重试生成
+                </button>
+              ) : null}
             </div>
           ) : (
             <p>还没有生成回答。可以从左侧新建对话，或从主页输入问题开始新的学习对话。</p>
