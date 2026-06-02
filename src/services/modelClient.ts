@@ -22,12 +22,13 @@ import {
 } from "./modelClient/protocol";
 import {
   buildReferenceSearchContext,
+  buildReferenceReadHistory,
   parseReferencePlanJson,
   parseReferenceSearchTermsJson,
   resolveReferencePlan,
   searchReferenceText
 } from "./referenceTools";
-import type { ReferenceToolPlan } from "./referenceTools";
+import type { ReferenceReadRecord, ReferenceToolPlan } from "./referenceTools";
 import {
   buildProviderEndpoint,
   buildProviderHeaders,
@@ -93,13 +94,14 @@ export const requestReferencePlan = async (
   provider: ProviderConfig,
   model: ModelConfig,
   searchContext = "",
+  readHistory = "",
   runtimeContext: Record<string, unknown> = {}
 ) => {
   if (documents.length === 0) {
     return { pages: [], images: [] } satisfies ReferenceToolPlan;
   }
   const endpoint = buildProviderEndpoint(provider);
-  const planningPrompt = buildReferencePlanningPrompt(prompt, documents, searchContext);
+  const planningPrompt = buildReferencePlanningPrompt(prompt, documents, searchContext, readHistory);
   appendRuntimeLog("model", "参考资料读取规划请求开始", {
     ...runtimeContext,
     provider: provider.name,
@@ -128,6 +130,141 @@ export const requestReferencePlan = async (
     selectedImageCount: plan.images.length
   });
   return plan;
+};
+
+const mergeReferencePlans = (plans: ReferenceToolPlan[]): ReferenceToolPlan => {
+  const pageMap = new Map<string, Set<number>>();
+  const images = new Set<string>();
+  for (const plan of plans) {
+    for (const selection of plan.pages) {
+      const pageSet = pageMap.get(selection.documentId) ?? new Set<number>();
+      selection.pages.forEach((page) => pageSet.add(page));
+      pageMap.set(selection.documentId, pageSet);
+    }
+    plan.images.forEach((imageId) => images.add(imageId));
+  }
+  return {
+    pages: [...pageMap.entries()].map(([documentId, pages]) => ({
+      documentId,
+      pages: [...pages].sort((a, b) => a - b)
+    })),
+    images: [...images]
+  };
+};
+
+const hasNewReferenceSelections = (plan: ReferenceToolPlan, seenPages: Set<string>, seenImages: Set<string>) =>
+  plan.pages.some((selection) => selection.pages.some((page) => !seenPages.has(`${selection.documentId}:${page}`))) ||
+  plan.images.some((imageId) => !seenImages.has(imageId));
+
+const buildReadRecord = (
+  round: number,
+  plan: ReferenceToolPlan,
+  documents: ParsedReferenceDocument[]
+): ReferenceReadRecord => {
+  const pages = plan.pages.flatMap((selection) => {
+    const document = documents.find((item) => item.id === selection.documentId);
+    if (!document) {
+      return [];
+    }
+    return [
+      {
+        documentId: document.id,
+        documentTitle: document.title,
+        pageNumbers: selection.pages
+      }
+    ];
+  });
+  return {
+    round,
+    pages,
+    imageIds: plan.images,
+    reason: plan.reason
+  };
+};
+
+const planReferenceReads = async ({
+  prompt,
+  documents,
+  provider,
+  model,
+  searchContext,
+  onProgress,
+  runtimeContext,
+  maxRounds = 3,
+  perRoundBudget = { maxPages: 12, maxImages: 3 },
+  finalBudget
+}: {
+  prompt: string;
+  documents: ParsedReferenceDocument[];
+  provider: ProviderConfig;
+  model: ModelConfig;
+  searchContext: string;
+  onProgress?: (message: string) => void;
+  runtimeContext: Record<string, unknown>;
+  maxRounds?: number;
+  perRoundBudget?: { maxPages: number; maxImages: number };
+  finalBudget?: { maxPages: number; maxImages: number };
+}) => {
+  const plans: ReferenceToolPlan[] = [];
+  const records: ReferenceReadRecord[] = [];
+  const seenPages = new Set<string>();
+  const seenImages = new Set<string>();
+
+  for (let round = 1; round <= maxRounds; round += 1) {
+    const plan = await requestReferencePlan(
+      prompt,
+      documents,
+      provider,
+      model,
+      searchContext,
+      buildReferenceReadHistory(records),
+      { ...runtimeContext, referenceReadRound: round, referenceReadMaxRounds: maxRounds }
+    );
+    const resolvedRound = resolveReferencePlan(plan, documents, perRoundBudget);
+    if (resolvedRound.documents.length === 0 || !hasNewReferenceSelections(plan, seenPages, seenImages)) {
+      appendRuntimeLog("model", "参考资料多轮阅读停止：没有新的可读选择", {
+        ...runtimeContext,
+        round,
+        reason: plan.reason
+      });
+      break;
+    }
+    plans.push(plan);
+    for (const selection of plan.pages) {
+      selection.pages.forEach((page) => seenPages.add(`${selection.documentId}:${page}`));
+    }
+    plan.images.forEach((imageId) => seenImages.add(imageId));
+    records.push(buildReadRecord(round, plan, documents));
+    const selectedPageNotice = summarizeSelectedPages(resolvedRound.documents);
+    if (selectedPageNotice) {
+      onProgress?.(selectedPageNotice);
+    }
+    appendRuntimeLog("model", "参考资料多轮阅读记录", {
+      ...runtimeContext,
+      round,
+      continueReading: plan.continueReading,
+      reason: plan.reason,
+      selectedPageCount: resolvedRound.selectedPageCount,
+      selectedImageCount: resolvedRound.selectedImageCount,
+      selectedDocuments: resolvedRound.documents.map((document) => ({
+        id: document.id,
+        title: document.title,
+        pages: document.pages.map((page) => page.pageNumber),
+        images: document.images?.map((image) => image.id) ?? []
+      }))
+    });
+    if (plan.continueReading === false) {
+      break;
+    }
+  }
+
+  const mergedPlan = mergeReferencePlans(plans);
+  const effectiveFinalBudget = finalBudget ?? {
+    maxPages: Math.max(18, maxRounds * perRoundBudget.maxPages),
+    maxImages: Math.max(4, maxRounds * perRoundBudget.maxImages)
+  };
+  const resolved = resolveReferencePlan(mergedPlan, documents, effectiveFinalBudget);
+  return { plan: mergedPlan, records, resolved };
 };
 
 export const requestReferenceSearchTerms = async (
@@ -319,26 +456,26 @@ export const requestChatCompletionWithTools = async (
   }
   onProgress?.("阅读资料中");
   let scopedDocuments = documents;
+  let readHistory = "";
   try {
     const searchContext = await runReferenceTextSearchTool(prompt, documents, provider, model, onProgress, runtimeContext);
-    const plan = await requestReferencePlan(
+    const { plan, records, resolved } = await planReferenceReads({
       prompt,
       documents,
       provider,
       model,
       searchContext,
+      onProgress,
       runtimeContext
-    );
+    });
+    readHistory = buildReferenceReadHistory(records);
     onProgress?.(plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");
-    const resolved = resolveReferencePlan(plan, documents);
     if (resolved.documents.length > 0) {
       scopedDocuments = resolved.documents;
-      const selectedPageNotice = summarizeSelectedPages(scopedDocuments);
-      if (selectedPageNotice) {
-        onProgress?.(selectedPageNotice);
-      }
       appendRuntimeLog("model", "参考工具读取完成", {
         ...runtimeContext,
+        readRounds: records.length,
+        readHistory,
         selectedPageCount: resolved.selectedPageCount,
         selectedImageCount: resolved.selectedImageCount,
         selectedDocuments: scopedDocuments.map((document) => ({
@@ -390,7 +527,10 @@ export const requestChatCompletionWithTools = async (
     }, "warn");
   }
   onProgress?.("模型回复中");
-  return requestChatCompletion(prompt, scopedDocuments, provider, model, answerMode, onDelta, {
+  const promptWithReadHistory = readHistory
+    ? `${prompt}\n\n<reference_read_history>\n${readHistory}\n</reference_read_history>\n\n请结合已经读取的参考内容回答；阅读记录仅用于帮助你核对覆盖范围，不要原样复述这些 XML 标签。`
+    : prompt;
+  return requestChatCompletion(promptWithReadHistory, scopedDocuments, provider, model, answerMode, onDelta, {
     ...runtimeContext,
     toolScopedReferenceCount: scopedDocuments.length
   });
@@ -566,8 +706,10 @@ export const requestInlineQuestionAnswer = async (
 ) => {
   const endpoint = buildProviderEndpoint(provider);
   let scopedDocuments = documents;
+  let readHistory = "";
   onProgress?.(documents.length > 0 ? "阅读资料中" : "模型回复中");
   try {
+    const runtimeContext = { question, positionLabel, reason: "inline-question" };
     const toolPrompt = `${draft?.prompt ?? ""}\n\n当前位置：${positionLabel}\n\n用户追问：${question}`;
     const searchContext = await runReferenceTextSearchTool(
       toolPrompt,
@@ -575,26 +717,28 @@ export const requestInlineQuestionAnswer = async (
       provider,
       model,
       onProgress,
-      { question, positionLabel, reason: "inline-question" }
+      runtimeContext
     );
-    const plan = await requestReferencePlan(
-      toolPrompt,
+    const { plan, records, resolved } = await planReferenceReads({
+      prompt: toolPrompt,
       documents,
       provider,
       model,
       searchContext,
-      { question, positionLabel, reason: "inline-question" }
-    );
+      onProgress,
+      runtimeContext,
+      maxRounds: 2,
+      perRoundBudget: { maxPages: 8, maxImages: 2 },
+      finalBudget: { maxPages: 14, maxImages: 3 }
+    });
+    readHistory = buildReferenceReadHistory(records);
     onProgress?.(plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");
-    const resolved = resolveReferencePlan(plan, documents, { maxPages: 10, maxImages: 2 });
     scopedDocuments = resolved.documents.length > 0 ? resolved.documents : documents.slice(0, 1);
-    const selectedPageNotice = summarizeSelectedPages(scopedDocuments);
-    if (selectedPageNotice) {
-      onProgress?.(selectedPageNotice);
-    }
     appendRuntimeLog("model", "位置提问参考工具读取完成", {
       question,
       positionLabel,
+      readRounds: records.length,
+      readHistory,
       selectedPageCount: resolved.selectedPageCount,
       selectedImageCount: resolved.selectedImageCount
     });
@@ -619,7 +763,15 @@ export const requestInlineQuestionAnswer = async (
     }, "warn");
   }
   onProgress?.("模型回复中");
-  const prompt = buildInlineQuestionPrompt(question, draft, scopedDocuments, positionLabel, messages);
+  const prompt = buildInlineQuestionPrompt(
+    readHistory
+      ? `${question}\n\n<reference_read_history>\n${readHistory}\n</reference_read_history>\n\n请结合已经读取的参考内容回答；阅读记录仅用于帮助你核对覆盖范围，不要原样复述这些 XML 标签。`
+      : question,
+    draft,
+    scopedDocuments,
+    positionLabel,
+    messages
+  );
   appendRuntimeLog("model", "位置提问请求开始", {
     provider: provider.name,
     model: model.name,

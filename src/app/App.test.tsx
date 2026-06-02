@@ -3225,6 +3225,27 @@ describe("MindLinker shell", () => {
     expect(screen.getByRole("button", { name: "对话 KL 散度与交叉熵" })).toHaveClass("active");
   });
 
+  it("clears delete confirmation state after a short timeout", async () => {
+    const user = userEvent.setup();
+    renderWithSeededProjects();
+    await enterWorkspace(user);
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "删除对话 交叉熵为什么适合分类" }));
+      expect(screen.getByRole("button", { name: "确认删除对话 交叉熵为什么适合分类" })).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(6200);
+      });
+
+      expect(screen.getByRole("button", { name: "删除对话 交叉熵为什么适合分类" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "确认删除对话 交叉熵为什么适合分类" })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 10000);
+
   it("deletes a specific project reference only after confirmation", async () => {
     const user = userEvent.setup();
     render(<App />);

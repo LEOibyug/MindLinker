@@ -104,13 +104,17 @@ ${answerModePrompts[answerMode].instruction}
 export const buildReferencePlanningPrompt = (
   prompt: string,
   documents: ParsedReferenceDocument[],
-  searchContext = ""
+  searchContext = "",
+  readHistory = ""
 ) => `${promptProtocolHeader}
 
 <task>参考资料读取规划</task>
 
 <instruction>
-请根据用户问题和参考地图，选择生成回答前最应该读取的页面和图片。目标是在保证回答正确性与覆盖面的同时，避免一次性读取过多内容。
+请根据用户问题、参考地图、文本搜索结果和已经阅读过的记录，选择下一轮最应该读取的页面和图片。
+目标是在保证回答正确性与覆盖面的同时，避免一次性读取过多内容。
+如果用户要求讲解整份材料、课程章节、论文或多个参考，请倾向于更完整地覆盖参考结构；不要只停留在前几页。
+你可以多轮阅读：本轮读完后，如果仍需要更多页面才能可靠回答，请将 continueReading 设为 true；如果已经足够回答，请设为 false。
 文本搜索结果只是一种辅助线索。没有搜索命中并不表示参考资料中没有相关内容，也不表示用户问题无法根据参考回答。
 </instruction>
 
@@ -123,11 +127,15 @@ ${buildReferenceToolMap(documents) || "无"}
 
 文本搜索工具结果：
 ${searchContext || "尚未执行文本搜索。"}
+
+已经阅读过的记录：
+${readHistory || "<NO_REFERENCE_READS_YET />"}
 </input>
 
 <tool_budget>
-- pages 最多选择 18 页。
-- images 最多选择 4 张。
+- 本轮 pages 最多选择 12 页。
+- 本轮 images 最多选择 3 张。
+- 优先选择尚未阅读过、且能补足当前理解缺口的页面。
 - 如果用户要求讲解整份材料，优先选择目录、总览、章节开头、关键定义/公式/图表页，而不是逐页全选。
 - 如果问题明显聚焦某一主题，优先选择主题相关页。
 - 如果文本搜索没有命中，仍要依据参考地图、页面摘要、章节标题、图表页和页面图片需求选择可能相关的页面。
@@ -142,6 +150,8 @@ ${searchContext || "尚未执行文本搜索。"}
 
 <json_output_protocol>
 {
+  "continueReading": false,
+  "reason": "简短说明本轮选择目的，以及为什么需要或不需要继续阅读",
   "pages": [
     {"documentId":"参考文档 id","pages":[1,2,3]}
   ],

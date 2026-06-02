@@ -12,6 +12,22 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Multi-Round Reference Reading And Delete Confirmation Timeout
+
+- Let the reference-reading planner run multiple rounds before the final model answer, so the model can decide whether it needs to keep reading instead of stopping after one page-selection pass.
+- Added reference read history and sends it back into later planning rounds and the final answer prompt, helping the model track which pages and images have already been read.
+- Updated the reference planning prompt to encourage fuller coverage for courses, papers, and whole-material explanations while still respecting per-round budgets.
+- Delete confirmations now automatically expire after a short timeout, so red confirmation buttons return to their normal state if the user does not click again.
+- Regression coverage:
+  - multi-round reading can select additional pages and include them in the final scoped context;
+  - reference planning remains compatible with older single-round JSON;
+  - delete confirmation state clears after timeout.
+- Verification:
+  - `npm test -- --run src/services/modelClient.test.ts src/services/referenceTools.test.ts src/app/App.test.tsx -t "multiple reference read rounds|delete confirmation state|reference planning|plans reference reads|parses model context plans"`
+  - `npx tsc --noEmit`
+  - `npm test -- --run`
+  - `npm run build`
+
 ### 2026-06-02 - Failed Request Retry And Title Recovery
 
 - Added real retry actions for failed main-answer generation and failed inline position questions.

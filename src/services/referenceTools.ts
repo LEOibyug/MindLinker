@@ -9,6 +9,19 @@ export type ReferenceToolPageSelection = {
 export type ReferenceToolPlan = {
   pages: ReferenceToolPageSelection[];
   images: string[];
+  continueReading?: boolean;
+  reason?: string;
+};
+
+export type ReferenceReadRecord = {
+  round: number;
+  pages: Array<{
+    documentId: string;
+    documentTitle: string;
+    pageNumbers: number[];
+  }>;
+  imageIds: string[];
+  reason?: string;
 };
 
 export type ReferenceTextSearchHit = {
@@ -101,7 +114,7 @@ export const parseReferencePlanJson = (rawText: string): ReferenceToolPlan => {
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
-  const parsed = JSON.parse(cleaned) as { pages?: unknown; images?: unknown };
+  const parsed = JSON.parse(cleaned) as { pages?: unknown; images?: unknown; continueReading?: unknown; reason?: unknown };
   const pages = Array.isArray(parsed.pages)
     ? parsed.pages
         .map((item) => {
@@ -115,7 +128,12 @@ export const parseReferencePlanJson = (rawText: string): ReferenceToolPlan => {
   const images = Array.isArray(parsed.images)
     ? [...new Set(parsed.images.filter((image): image is string => typeof image === "string" && image.trim().length > 0))]
     : [];
-  return { pages, images };
+  return {
+    pages,
+    images,
+    ...(typeof parsed.continueReading === "boolean" ? { continueReading: parsed.continueReading } : {}),
+    ...(typeof parsed.reason === "string" && parsed.reason.trim() ? { reason: parsed.reason.trim() } : {})
+  };
 };
 
 const normalizeSearchText = (value: string) => value.replace(/\s+/g, " ").trim();
@@ -204,6 +222,28 @@ export const buildReferenceSearchContext = (result: ReferenceTextSearchResult) =
           .join("\n")
       : "";
   return `${hitText}${unavailableText ? `\n${unavailableText}` : ""}`;
+};
+
+export const buildReferenceReadHistory = (records: ReferenceReadRecord[]) => {
+  if (records.length === 0) {
+    return "<NO_REFERENCE_READS_YET />";
+  }
+  return records
+    .map((record) => {
+      const pages = record.pages
+        .map(
+          (item) =>
+            `<READ_PAGES documentId="${escapeXmlAttribute(item.documentId)}" title="${escapeXmlAttribute(item.documentTitle)}" pages="${item.pageNumbers.join(",")}" />`
+        )
+        .join("\n");
+      const images =
+        record.imageIds.length > 0
+          ? `<READ_IMAGES ids="${record.imageIds.map(escapeXmlAttribute).join(",")}" />`
+          : "<NO_IMAGES_READ_IN_THIS_ROUND />";
+      const reason = record.reason ? `<READ_REASON>${record.reason}</READ_REASON>` : "";
+      return `<READ_ROUND number="${record.round}">\n${pages || "<NO_PAGES_READ_IN_THIS_ROUND />"}\n${images}${reason ? `\n${reason}` : ""}\n</READ_ROUND>`;
+    })
+    .join("\n");
 };
 
 const cloneDocumentShell = (document: ParsedReferenceDocument, pages: ParsedPdfPage[], images: ReferenceImageAsset[]): ParsedReferenceDocument => ({

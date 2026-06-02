@@ -168,7 +168,18 @@ describe("modelClient", () => {
         expect(body).toContain("routing algorithm page");
         return new Response(
           JSON.stringify({
-            choices: [{ message: { content: JSON.stringify({ pages: [{ documentId: "doc-a", pages: [2] }], images: [] }) } }]
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    continueReading: false,
+                    reason: "已找到路由算法页",
+                    pages: [{ documentId: "doc-a", pages: [2] }],
+                    images: []
+                  })
+                }
+              }
+            ]
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
@@ -196,5 +207,90 @@ describe("modelClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(progressMessages).toContain("正在查找 routing");
     expect(progressMessages).toContain("正在查看 Network.pdf 第 2 页");
+  });
+
+  it("allows the model to plan multiple reference read rounds before the final answer", async () => {
+    const document: ParsedReferenceDocument = {
+      id: "doc-a",
+      title: "Network.pdf",
+      kind: "pdf",
+      pageCount: 5,
+      status: "parsed",
+      version: "local:network",
+      pages: [
+        { pageNumber: 1, text: "overview page", textQuality: "good", needsImage: false },
+        { pageNumber: 2, text: "routing algorithm page", textQuality: "good", needsImage: false },
+        { pageNumber: 3, text: "routing table page", textQuality: "good", needsImage: false },
+        { pageNumber: 4, text: "fragment offset page", textQuality: "good", needsImage: false },
+        { pageNumber: 5, text: "checksum appendix page", textQuality: "good", needsImage: false }
+      ],
+      diagnostics: []
+    };
+    let planningRound = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const body = JSON.stringify(JSON.parse(String(init?.body)));
+      if (body.includes("参考文本搜索词规划")) {
+        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ terms: ["routing"] }) } }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      if (body.includes("参考资料读取规划")) {
+        planningRound += 1;
+        if (planningRound === 1) {
+          expect(body).toContain("<NO_REFERENCE_READS_YET");
+          return new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      continueReading: true,
+                      reason: "先看算法页，再继续看分片页",
+                      pages: [{ documentId: "doc-a", pages: [2] }],
+                      images: []
+                    })
+                  }
+                }
+              ]
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        expect(body).toContain('<READ_PAGES documentId=\\"doc-a\\"');
+        expect(body).toContain('pages=\\"2\\"');
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    continueReading: false,
+                    reason: "已补充关键后续页",
+                    pages: [{ documentId: "doc-a", pages: [4] }],
+                    images: []
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      expect(body).toContain("routing algorithm page");
+      expect(body).toContain("fragment offset page");
+      expect(body).toContain("reference_read_history");
+      expect(body).not.toContain("checksum appendix page");
+      return new Response(JSON.stringify({ choices: [{ message: { content: "多轮阅读后的主回答" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+
+    const answer = await requestChatCompletionWithTools("完整讲解网络层", [document], providers[1], providers[1].models[0]);
+
+    expect(answer).toBe("多轮阅读后的主回答");
+    expect(planningRound).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });

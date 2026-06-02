@@ -30,6 +30,8 @@ import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { useAppDerivedState } from "./hooks/useAppDerivedState";
 import { useConversationStatusActions } from "./hooks/useConversationStatusActions";
 
+const deleteConfirmationTimeoutMs = 6000;
+
 export function App() {
   const [appView, setAppView] = useState<"home" | "workspace">("home");
   const [homePrompt, setHomePrompt] = useState("");
@@ -181,6 +183,18 @@ export function App() {
     const interval = window.setInterval(() => setGenerationHintIndex((index) => index + 1), 1400);
     return () => window.clearInterval(interval);
   }, [generationPhase]);
+
+  useEffect(() => {
+    if (!confirmingProjectDeleteId && !confirmingConversationDeleteId && !confirmingReferenceDeleteId) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setConfirmingProjectDeleteId(null);
+      setConfirmingConversationDeleteId(null);
+      setConfirmingReferenceDeleteId(null);
+    }, deleteConfirmationTimeoutMs);
+    return () => window.clearTimeout(timeout);
+  }, [confirmingConversationDeleteId, confirmingProjectDeleteId, confirmingReferenceDeleteId]);
 
   const logDebugMessage = (message: string) => {
     console.info(`[MindLinker] ${message}`);
