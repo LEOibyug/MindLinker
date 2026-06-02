@@ -102,7 +102,32 @@ const getImageDataUrlFromObject = (value) => {
   return typeof dataUrl === "string" && dataUrl.startsWith("data:image/") ? dataUrl : null;
 };
 
-const renderPdfPageToDataUrl = async () => placeholderPngDataUrl;
+const renderPdfPageToDataUrl = async (page) => {
+  if (!page.getViewport || !page.render) {
+    return placeholderPngDataUrl;
+  }
+
+  try {
+    const { createCanvas } = await import("@napi-rs/canvas");
+    const baseViewport = page.getViewport({ scale: 1 });
+    const targetWidth = 1400;
+    const scale = Math.min(2, Math.max(1, targetWidth / Math.max(baseViewport.width, 1)));
+    const viewport = page.getViewport({ scale });
+    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    const context = canvas.getContext("2d");
+    await page
+      .render({
+        canvas,
+        canvasContext: context,
+        viewport,
+        background: "rgb(255,255,255)"
+      })
+      .promise;
+    return canvas.toDataURL("image/png");
+  } catch {
+    return placeholderPngDataUrl;
+  }
+};
 
 const extractPageImageAssets = async ({ documentId, documentTitle, ops, page, pageNumber }) => {
   if (!page.getOperatorList) {
@@ -193,7 +218,7 @@ const parseReferenceFileFromPath = async ({ filePath, projectId, index, ragEnabl
               textQuality,
               needsImage,
               ...(needsImage ? { imagePlaceholder: `<IMAGE FOR PAGE: ${pageNumber} / ${pageCount}>` } : {}),
-              ...(needsImage ? { imageDataUrl: await renderPdfPageToDataUrl() } : {})
+              ...(needsImage ? { imageDataUrl: await renderPdfPageToDataUrl(page) } : {})
             },
             referenceImages
           };

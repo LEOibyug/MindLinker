@@ -12,6 +12,13 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Reference Inspector PDF Page Rendering
+
+- Fixed the standalone reference inspector CLI so PDF page image inputs are rendered with Node canvas instead of the old 1x1 placeholder image.
+- Added `@napi-rs/canvas` as an explicit runtime dependency because the CLI now imports it directly for local PDF page rasterization.
+- Added a regression test that runs the inspector against a PDF and verifies the generated page PNG asset is page-sized rather than the placeholder.
+- Verified the user-reported `网络层.pdf` command now emits real `1400x788` page images with non-flat brightness ranges.
+
 ### 2026-06-02 - Folder-Based Tool Reports
 
 - Updated the interaction export and reference inspection CLIs to default to folder outputs:
