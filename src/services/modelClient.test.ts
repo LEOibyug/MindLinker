@@ -6,6 +6,7 @@ import {
   extractStreamTextFromPayload,
   extractTextFromModelPayload,
   findChatModelConfig,
+  requestInlineQuestionAnswer,
   requestChatCompletionWithTools
 } from "./modelClient";
 import { buildReferencePlanningPrompt, buildReferenceSearchTermsPrompt } from "./modelClient/protocol";
@@ -133,14 +134,15 @@ describe("modelClient", () => {
     const planningPrompt = buildReferencePlanningPrompt("讲解路由聚合", [document], "<NO_TEXT_SEARCH_HITS />");
     expect(planningPrompt).toContain("没有搜索命中并不表示参考资料中没有相关内容");
     expect(planningPrompt).toContain("不要把“没有搜索命中”解释为“资料没有相关内容”");
-    expect(planningPrompt).toContain("仍要依据参考地图、页面摘要、章节标题、图表页和页面图片需求选择可能相关的页面");
+    expect(planningPrompt).toContain("最终回答请求会默认提供全部可提取文本");
+    expect(planningPrompt).toContain("仍要依据参考地图、页面摘要、章节标题、图表页和页面图片需求选择可能相关的视觉补充");
 
     const searchPrompt = buildReferenceSearchTermsPrompt("讲解路由聚合", [document]);
     expect(searchPrompt).toContain("搜索无命中只代表这些关键词没有在已提取文本中出现");
     expect(searchPrompt).toContain("不代表参考资料没有相关内容");
   });
 
-  it("plans reference reads before sending a scoped main-answer request", async () => {
+  it("sends all extracted text while using tool planning only for visual inputs", async () => {
     const document: ParsedReferenceDocument = {
       id: "doc-a",
       title: "Network.pdf",
@@ -150,8 +152,18 @@ describe("modelClient", () => {
       version: "local:network",
       pages: [
         { pageNumber: 1, text: "overview page", textQuality: "good", needsImage: false },
-        { pageNumber: 2, text: "routing algorithm page", textQuality: "good", needsImage: false },
+        { pageNumber: 2, text: "routing algorithm page", textQuality: "good", needsImage: true, imageDataUrl: "data:image/png;base64,page-two" },
         { pageNumber: 3, text: "unrelated appendix page", textQuality: "good", needsImage: false }
+      ],
+      images: [
+        {
+          id: "doc-a-p2-img1",
+          documentId: "doc-a",
+          documentTitle: "Network.pdf",
+          pageNumber: 2,
+          dataUrl: "data:image/png;base64,figure-two",
+          alt: "路由图"
+        }
       ],
       diagnostics: []
     };
@@ -163,7 +175,7 @@ describe("modelClient", () => {
           headers: { "Content-Type": "application/json" }
         });
       }
-      if (body.includes("参考资料读取规划")) {
+      if (body.includes("参考资料视觉补充规划")) {
         expect(body).toContain('<SEARCH_HIT term=\\"routing\\"');
         expect(body).toContain("routing algorithm page");
         return new Response(
@@ -173,9 +185,9 @@ describe("modelClient", () => {
                 message: {
                   content: JSON.stringify({
                     continueReading: false,
-                    reason: "已找到路由算法页",
+                    reason: "文本已完整提供，仅补充路由图像",
                     pages: [{ documentId: "doc-a", pages: [2] }],
-                    images: []
+                    images: ["doc-a-p2-img1"]
                   })
                 }
               }
@@ -185,7 +197,10 @@ describe("modelClient", () => {
         );
       }
       expect(body).toContain("routing algorithm page");
-      expect(body).not.toContain("unrelated appendix page");
+      expect(body).toContain("overview page");
+      expect(body).toContain("unrelated appendix page");
+      expect(body).toContain("data:image/png;base64,page-two");
+      expect(body).toContain("data:image/png;base64,figure-two");
       return new Response(JSON.stringify({ choices: [{ message: { content: "主回答" } }] }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
@@ -235,7 +250,7 @@ describe("modelClient", () => {
           headers: { "Content-Type": "application/json" }
         });
       }
-      if (body.includes("参考资料读取规划")) {
+      if (body.includes("参考资料视觉补充规划")) {
         planningRound += 1;
         if (planningRound === 1) {
           expect(body).toContain("<NO_REFERENCE_READS_YET");
@@ -280,7 +295,7 @@ describe("modelClient", () => {
       expect(body).toContain("routing algorithm page");
       expect(body).toContain("fragment offset page");
       expect(body).toContain("reference_read_history");
-      expect(body).not.toContain("checksum appendix page");
+      expect(body).toContain("checksum appendix page");
       return new Response(JSON.stringify({ choices: [{ message: { content: "多轮阅读后的主回答" } }] }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
@@ -292,5 +307,119 @@ describe("modelClient", () => {
     expect(answer).toBe("多轮阅读后的主回答");
     expect(planningRound).toBe(2);
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps complete text when visual planning fails", async () => {
+    const document: ParsedReferenceDocument = {
+      id: "doc-a",
+      title: "Network.pdf",
+      kind: "pdf",
+      pageCount: 8,
+      status: "parsed",
+      version: "local:network",
+      pages: Array.from({ length: 8 }, (_, index) => ({
+        pageNumber: index + 1,
+        text: `page-${index + 1}-text`,
+        textQuality: "good",
+        needsImage: index % 2 === 0,
+        imageDataUrl: index % 2 === 0 ? `data:image/png;base64,page-${index + 1}` : undefined
+      })),
+      diagnostics: []
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const body = JSON.stringify(JSON.parse(String(init?.body)));
+      if (body.includes("参考文本搜索词规划")) {
+        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ terms: ["page"] }) } }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      if (body.includes("参考资料视觉补充规划")) {
+        return new Response(JSON.stringify({ error: "planning unavailable" }), {
+          status: 502,
+          statusText: "Bad Gateway",
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      expect(body).toContain("page-1-text");
+      expect(body).toContain("page-8-text");
+      expect(body).not.toContain("data:image/png;base64,page-1");
+      return new Response(JSON.stringify({ choices: [{ message: { content: "完整文本回答" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+
+    const answer = await requestChatCompletionWithTools("讲解全部", [document], providers[1], providers[1].models[0]);
+
+    expect(answer).toBe("完整文本回答");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses complete text and tool-selected visuals for inline questions", async () => {
+    const document: ParsedReferenceDocument = {
+      id: "doc-a",
+      title: "Network.pdf",
+      kind: "pdf",
+      pageCount: 3,
+      status: "parsed",
+      version: "local:network",
+      pages: [
+        { pageNumber: 1, text: "intro page", textQuality: "good", needsImage: false },
+        { pageNumber: 2, text: "diagram page", textQuality: "good", needsImage: true, imageDataUrl: "data:image/png;base64,page-two" },
+        { pageNumber: 3, text: "summary page", textQuality: "good", needsImage: false }
+      ],
+      diagnostics: []
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const body = JSON.stringify(JSON.parse(String(init?.body)));
+      if (body.includes("参考文本搜索词规划")) {
+        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ terms: ["diagram"] }) } }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      if (body.includes("参考资料视觉补充规划")) {
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    continueReading: false,
+                    reason: "补充当前位置相关图像",
+                    pages: [{ documentId: "doc-a", pages: [2] }],
+                    images: []
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      expect(body).toContain("<task>位置提问回答</task>");
+      expect(body).toContain("intro page");
+      expect(body).toContain("diagram page");
+      expect(body).toContain("summary page");
+      expect(body).toContain("data:image/png;base64,page-two");
+      return new Response(JSON.stringify({ choices: [{ message: { content: "位置回答" } }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+
+    const answer = await requestInlineQuestionAnswer(
+      "这张图是什么意思？",
+      null,
+      [document],
+      "第 2 段",
+      [],
+      providers[1],
+      providers[1].models[0]
+    );
+
+    expect(answer).toBe("位置回答");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

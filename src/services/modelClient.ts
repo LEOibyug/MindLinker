@@ -23,6 +23,7 @@ import {
 import {
   buildReferenceSearchContext,
   buildReferenceReadHistory,
+  buildTextCompleteVisualReferenceContext,
   parseReferencePlanJson,
   parseReferenceSearchTermsJson,
   resolveReferencePlan,
@@ -455,7 +456,7 @@ export const requestChatCompletionWithTools = async (
     return requestChatCompletion(prompt, documents, provider, model, answerMode, onDelta, runtimeContext);
   }
   onProgress?.("阅读资料中");
-  let scopedDocuments = documents;
+  let scopedDocuments = buildTextCompleteVisualReferenceContext({ pages: [], images: [] }, documents).documents;
   let readHistory = "";
   try {
     const searchContext = await runReferenceTextSearchTool(prompt, documents, provider, model, onProgress, runtimeContext);
@@ -469,61 +470,39 @@ export const requestChatCompletionWithTools = async (
       runtimeContext
     });
     readHistory = buildReferenceReadHistory(records);
-    onProgress?.(plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");
-    if (resolved.documents.length > 0) {
-      scopedDocuments = resolved.documents;
-      appendRuntimeLog("model", "参考工具读取完成", {
+    onProgress?.(plan.pages.length > 0 || plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");
+    const visualContext = buildTextCompleteVisualReferenceContext(plan, documents, {
+      maxPages: Math.max(18, records.length * 12),
+      maxImages: Math.max(4, records.length * 3)
+    });
+    scopedDocuments = visualContext.documents;
+    appendRuntimeLog("model", "参考工具读取完成", {
+      ...runtimeContext,
+      readRounds: records.length,
+      readHistory,
+      fullTextPageCount: scopedDocuments.reduce((total, document) => total + document.pages.length, 0),
+      selectedPageImageCount: visualContext.selectedPageImageCount,
+      selectedReferenceImageCount: visualContext.selectedReferenceImageCount,
+      selectedDocuments: scopedDocuments.map((document) => ({
+        id: document.id,
+        title: document.title,
+        pages: document.pages.map((page) => page.pageNumber),
+        pageImages: document.pages.filter((page) => page.imageDataUrl).map((page) => page.pageNumber),
+        images: document.images?.map((image) => image.id) ?? []
+      }))
+    });
+    if (resolved.documents.length === 0) {
+      appendRuntimeLog("model", "参考工具未选择视觉补充，继续使用全量文本上下文", {
         ...runtimeContext,
-        readRounds: records.length,
-        readHistory,
-        selectedPageCount: resolved.selectedPageCount,
-        selectedImageCount: resolved.selectedImageCount,
-        selectedDocuments: scopedDocuments.map((document) => ({
-          id: document.id,
-          title: document.title,
-          pages: document.pages.map((page) => page.pageNumber),
-          images: document.images?.map((image) => image.id) ?? []
-        }))
-      });
-    } else {
-      const fallback = resolveReferencePlan(
-        {
-          pages: documents.map((document) => ({
-            documentId: document.id,
-            pages: document.pages.slice(0, 6).map((page) => page.pageNumber)
-          })),
-          images: documents.flatMap((document) => (document.images ?? []).slice(0, 1).map((image) => image.id))
-        },
-        documents
-      );
-      scopedDocuments = fallback.documents.length > 0 ? fallback.documents : documents.slice(0, 1);
-      appendRuntimeLog("model", "参考工具规划为空，使用预算内兜底上下文", {
-        ...runtimeContext,
-        selectedPageCount: fallback.selectedPageCount,
-        selectedImageCount: fallback.selectedImageCount
+        fullTextPageCount: scopedDocuments.reduce((total, document) => total + document.pages.length, 0)
       }, "warn");
     }
   } catch (error) {
-    const fallback = resolveReferencePlan(
-      {
-        pages: documents.map((document) => ({
-          documentId: document.id,
-          pages: document.pages.slice(0, 6).map((page) => page.pageNumber)
-        })),
-        images: documents.flatMap((document) => (document.images ?? []).slice(0, 1).map((image) => image.id))
-      },
-      documents
-    );
-    scopedDocuments = fallback.documents.length > 0 ? fallback.documents : documents.slice(0, 1);
-    const fallbackPageNotice = summarizeSelectedPages(scopedDocuments);
-    if (fallbackPageNotice) {
-      onProgress?.(fallbackPageNotice);
-    }
-    appendRuntimeLog("model", "参考工具规划失败，使用预算内兜底上下文", {
+    scopedDocuments = buildTextCompleteVisualReferenceContext({ pages: [], images: [] }, documents).documents;
+    appendRuntimeLog("model", "参考工具规划失败，继续使用全量文本上下文", {
       ...runtimeContext,
       message: error instanceof Error ? error.message : String(error),
-      selectedPageCount: fallback.selectedPageCount,
-      selectedImageCount: fallback.selectedImageCount
+      fullTextPageCount: scopedDocuments.reduce((total, document) => total + document.pages.length, 0)
     }, "warn");
   }
   onProgress?.("模型回复中");
@@ -705,7 +684,7 @@ export const requestInlineQuestionAnswer = async (
   onProgress?: (message: string) => void
 ) => {
   const endpoint = buildProviderEndpoint(provider);
-  let scopedDocuments = documents;
+  let scopedDocuments = buildTextCompleteVisualReferenceContext({ pages: [], images: [] }, documents).documents;
   let readHistory = "";
   onProgress?.(documents.length > 0 ? "阅读资料中" : "模型回复中");
   try {
@@ -732,43 +711,49 @@ export const requestInlineQuestionAnswer = async (
       finalBudget: { maxPages: 14, maxImages: 3 }
     });
     readHistory = buildReferenceReadHistory(records);
-    onProgress?.(plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");
-    scopedDocuments = resolved.documents.length > 0 ? resolved.documents : documents.slice(0, 1);
+    onProgress?.(plan.pages.length > 0 || plan.images.length > 0 ? "阅读图表中" : "我再仔细看看");
+    const visualContext = buildTextCompleteVisualReferenceContext(plan, documents, {
+      maxPages: 14,
+      maxImages: 3
+    });
+    scopedDocuments = visualContext.documents;
     appendRuntimeLog("model", "位置提问参考工具读取完成", {
       question,
       positionLabel,
       readRounds: records.length,
       readHistory,
-      selectedPageCount: resolved.selectedPageCount,
-      selectedImageCount: resolved.selectedImageCount
+      fullTextPageCount: scopedDocuments.reduce((total, document) => total + document.pages.length, 0),
+      selectedPageImageCount: visualContext.selectedPageImageCount,
+      selectedReferenceImageCount: visualContext.selectedReferenceImageCount
     });
+    if (resolved.documents.length === 0) {
+      appendRuntimeLog("model", "位置提问未选择视觉补充，继续使用全量文本上下文", {
+        question,
+        positionLabel,
+        fullTextPageCount: scopedDocuments.reduce((total, document) => total + document.pages.length, 0)
+      }, "warn");
+    }
   } catch (error) {
-    const fallback = resolveReferencePlan(
-      {
-        pages: documents.map((document) => ({
-          documentId: document.id,
-          pages: document.pages.slice(0, 4).map((page) => page.pageNumber)
-        })),
-        images: []
-      },
-      documents,
-      { maxPages: 10, maxImages: 0 }
-    );
-    scopedDocuments = fallback.documents.length > 0 ? fallback.documents : documents.slice(0, 1);
-    appendRuntimeLog("model", "位置提问参考工具规划失败，使用预算内兜底上下文", {
+    scopedDocuments = buildTextCompleteVisualReferenceContext({ pages: [], images: [] }, documents).documents;
+    appendRuntimeLog("model", "位置提问参考工具规划失败，继续使用全量文本上下文", {
       question,
       positionLabel,
       message: error instanceof Error ? error.message : String(error),
-      selectedPageCount: fallback.selectedPageCount
+      fullTextPageCount: scopedDocuments.reduce((total, document) => total + document.pages.length, 0)
     }, "warn");
   }
   onProgress?.("模型回复中");
+  const promptOnlyDocuments = scopedDocuments.map((document) => ({
+    ...document,
+    pages: [],
+    images: []
+  }));
   const prompt = buildInlineQuestionPrompt(
     readHistory
       ? `${question}\n\n<reference_read_history>\n${readHistory}\n</reference_read_history>\n\n请结合已经读取的参考内容回答；阅读记录仅用于帮助你核对覆盖范围，不要原样复述这些 XML 标签。`
       : question,
     draft,
-    scopedDocuments,
+    promptOnlyDocuments,
     positionLabel,
     messages
   );
@@ -781,10 +766,49 @@ export const requestInlineQuestionAnswer = async (
     positionLabel,
     previousMessageCount: messages.length
   });
+  const inlineReferenceParts = buildOpenAIInputParts(scopedDocuments);
   const response = await fetch(endpoint, {
     method: "POST",
     headers: buildProviderHeaders(provider),
-    body: JSON.stringify(buildProviderRequestBody({ provider, model, prompt, stream: true }))
+    body: JSON.stringify(
+      provider.apiFormat === "openai-responses"
+        ? {
+            model: model.name,
+            stream: true,
+            input: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "input_text",
+                    text: prompt
+                  },
+                  ...inlineReferenceParts
+                ]
+              }
+            ]
+          }
+        : {
+            model: model.name,
+            stream: true,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: prompt
+                  },
+                  ...inlineReferenceParts.map((part) =>
+                    part.type === "input_text"
+                      ? { type: "text", text: part.text }
+                      : { type: "image_url", image_url: { url: part.image_url, detail: part.detail } }
+                  )
+                ]
+              }
+            ]
+          }
+    )
   });
   if (!response.ok) {
     appendRuntimeLog("model", "位置提问请求失败", { status: response.status, statusText: response.statusText, question, positionLabel }, "error");

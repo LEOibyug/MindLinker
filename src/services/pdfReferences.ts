@@ -398,8 +398,8 @@ export const buildReferenceContext = (documents: ParsedReferenceDocument[]) =>
     .join("\n\n");
 
 export const buildOpenAIInputParts = (documents: ParsedReferenceDocument[]): OpenAIInputPart[] =>
-  documents.flatMap((document) =>
-    document.pages.flatMap((page) => {
+  documents.flatMap((document) => {
+    const pageParts = document.pages.flatMap((page): OpenAIInputPart[] => {
       const textPart: OpenAIInputPart = {
         type: "input_text",
         text: `<REFERENCE title="${escapeXmlAttribute(document.title)}" kind="${document.kind}" page="${page.pageNumber}/${document.pageCount}">\n${page.text}\n</REFERENCE>`
@@ -407,13 +407,26 @@ export const buildOpenAIInputParts = (documents: ParsedReferenceDocument[]): Ope
       if (!page.imageDataUrl) {
         return [textPart];
       }
-      return [
-        textPart,
-        {
-          type: "input_image",
-          image_url: page.imageDataUrl,
-          detail: "auto"
-        }
-      ];
-    })
-  );
+      const imagePart: OpenAIInputPart = {
+        type: "input_image",
+        image_url: page.imageDataUrl,
+        detail: "auto"
+      };
+      return [textPart, imagePart];
+    });
+    const imageAssetParts = (document.images ?? []).flatMap((image): OpenAIInputPart[] => {
+      const imageLabelPart: OpenAIInputPart = {
+        type: "input_text",
+        text: `<REFERENCE_IMAGE_INPUT id="${escapeXmlAttribute(image.id)}" title="${escapeXmlAttribute(image.alt)}" source="${escapeXmlAttribute(image.documentTitle)}"${
+          image.pageNumber ? ` page="${image.pageNumber}"` : ""
+        } />`
+      };
+      const imagePart: OpenAIInputPart = {
+        type: "input_image",
+        image_url: image.dataUrl,
+        detail: "auto"
+      };
+      return [imageLabelPart, imagePart];
+    });
+    return [...pageParts, ...imageAssetParts];
+  });

@@ -254,6 +254,11 @@ const cloneDocumentShell = (document: ParsedReferenceDocument, pages: ParsedPdfP
   diagnostics: document.diagnostics
 });
 
+const stripPageImage = (page: ParsedPdfPage): ParsedPdfPage => ({
+  ...page,
+  imageDataUrl: undefined
+});
+
 export const resolveReferencePlan = (
   plan: ReferenceToolPlan,
   documents: ParsedReferenceDocument[],
@@ -297,3 +302,43 @@ export const resolveReferencePlan = (
 };
 
 export const buildReferenceToolContext = (documents: ParsedReferenceDocument[]) => buildReferenceContext(documents);
+
+export const buildTextCompleteVisualReferenceContext = (
+  plan: ReferenceToolPlan,
+  documents: ParsedReferenceDocument[],
+  budget: Partial<ReferenceToolBudget> = {}
+) => {
+  const effectiveBudget = { ...defaultBudget, ...budget };
+  const selectedPages = new Map<string, Set<number>>();
+  let remainingPageImages = effectiveBudget.maxPages;
+  for (const selection of plan.pages) {
+    if (remainingPageImages <= 0) {
+      break;
+    }
+    const pageSet = selectedPages.get(selection.documentId) ?? new Set<number>();
+    for (const pageNumber of selection.pages) {
+      if (remainingPageImages <= 0) {
+        break;
+      }
+      if (!pageSet.has(pageNumber)) {
+        pageSet.add(pageNumber);
+        remainingPageImages -= 1;
+      }
+    }
+    selectedPages.set(selection.documentId, pageSet);
+  }
+
+  const selectedReferenceImageIds = new Set(plan.images.slice(0, effectiveBudget.maxImages));
+  const visualDocuments = documents.map((document) => {
+    const pageNumbers = selectedPages.get(document.id) ?? new Set<number>();
+    const pages = document.pages.map((page) => (pageNumbers.has(page.pageNumber) && page.imageDataUrl ? page : stripPageImage(page)));
+    const images = (document.images ?? []).filter((image) => selectedReferenceImageIds.has(image.id));
+    return cloneDocumentShell(document, pages, images);
+  });
+
+  return {
+    documents: visualDocuments,
+    selectedPageImageCount: visualDocuments.reduce((total, document) => total + document.pages.filter((page) => page.imageDataUrl).length, 0),
+    selectedReferenceImageCount: visualDocuments.reduce((total, document) => total + (document.images?.length ?? 0), 0)
+  };
+};

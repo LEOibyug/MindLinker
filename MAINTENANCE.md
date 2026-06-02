@@ -12,6 +12,14 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Complete Text Context With Visual Reference Tools
+
+- Changed tool-style reference reading so main answers and inline questions receive all extracted reference text by default.
+- Reference planning now selects only visual supplements: PDF page images and parsed reference image assets.
+- Planning failures no longer fall back to the first few pages; the model still receives complete extracted text and simply proceeds without visual supplements.
+- Inline questions now use multimodal request bodies when visual supplements are selected.
+- Added regression coverage for complete-text main answers, visual-only selection, planning-failure fallback, and inline question visual supplements.
+
 ### 2026-06-02 - Reference Inspector PDF Page Rendering
 
 - Fixed the standalone reference inspector CLI so PDF page image inputs are rendered with Node canvas instead of the old 1x1 placeholder image.

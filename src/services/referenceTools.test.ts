@@ -3,6 +3,7 @@ import {
   buildReferenceToolContext,
   buildReferenceToolMap,
   buildReferenceSearchContext,
+  buildTextCompleteVisualReferenceContext,
   parseReferencePlanJson,
   parseReferenceSearchTermsJson,
   searchReferenceText,
@@ -19,7 +20,7 @@ const documentA: ParsedReferenceDocument = {
   version: "local:network",
   pages: [
     { pageNumber: 1, text: "网络层总览与转发。".repeat(8), textQuality: "good", needsImage: false },
-    { pageNumber: 2, text: "Dijkstra 最短路径算法与链路状态路由。".repeat(8), textQuality: "good", needsImage: false },
+    { pageNumber: 2, text: "Dijkstra 最短路径算法与链路状态路由。".repeat(8), textQuality: "good", needsImage: true, imageDataUrl: "data:image/png;base64,page-two" },
     { pageNumber: 3, text: "距离向量路由、收敛与坏消息传播。".repeat(8), textQuality: "good", needsImage: false },
     { pageNumber: 4, text: "IP 数据报格式与分片。".repeat(8), textQuality: "good", needsImage: false }
   ],
@@ -110,5 +111,23 @@ describe("referenceTools", () => {
     expect(context.documents[0].images?.map((image) => image.id)).toEqual(["doc-a-p2-img1"]);
     expect(buildReferenceToolContext(context.documents)).toContain("Dijkstra 最短路径算法");
     expect(buildReferenceToolContext(context.documents)).toContain('<REFERENCE_IMAGE id="doc-a-p2-img1"');
+  });
+
+  it("keeps all reference text while limiting visual inputs to selected pages and images", () => {
+    const context = buildTextCompleteVisualReferenceContext(
+      {
+        pages: [{ documentId: "doc-a", pages: [2] }],
+        images: ["doc-a-p2-img1"]
+      },
+      [documentA],
+      { maxPages: 1, maxImages: 1 }
+    );
+
+    expect(context.documents).toHaveLength(1);
+    expect(context.documents[0].pages.map((page) => page.pageNumber)).toEqual([1, 2, 3, 4]);
+    expect(context.documents[0].pages.filter((page) => page.imageDataUrl).map((page) => page.pageNumber)).toEqual([2]);
+    expect(context.documents[0].images?.map((image) => image.id)).toEqual(["doc-a-p2-img1"]);
+    expect(context.selectedPageImageCount).toBe(1);
+    expect(context.selectedReferenceImageCount).toBe(1);
   });
 });

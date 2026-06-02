@@ -71,7 +71,7 @@ export const buildChatInstructionText = (answerMode: AnswerMode) => `${promptPro
 
 <input>
 - 用户问题在后续消息中给出。
-- 参考材料会以文本页、页面图片或多模态附件形式随消息提供。
+- 参考材料的可提取文本会尽量完整提供；页面图片、图表和多模态附件只作为视觉补充随消息提供。
 - 当前详细程度：${answerModePrompts[answerMode].label}。
 </input>
 
@@ -108,13 +108,14 @@ export const buildReferencePlanningPrompt = (
   readHistory = ""
 ) => `${promptProtocolHeader}
 
-<task>参考资料读取规划</task>
+<task>参考资料视觉补充规划</task>
 
 <instruction>
-请根据用户问题、参考地图、文本搜索结果和已经阅读过的记录，选择下一轮最应该读取的页面和图片。
-目标是在保证回答正确性与覆盖面的同时，避免一次性读取过多内容。
-如果用户要求讲解整份材料、课程章节、论文或多个参考，请倾向于更完整地覆盖参考结构；不要只停留在前几页。
-你可以多轮阅读：本轮读完后，如果仍需要更多页面才能可靠回答，请将 continueReading 设为 true；如果已经足够回答，请设为 false。
+最终回答请求会默认提供全部可提取文本。你不需要选择文本页来让模型“读文字”。
+请根据用户问题、参考地图、文本搜索结果和已经补充过的视觉记录，选择下一轮最值得作为多模态图片输入补充的 PDF 页面图片和参考图片。
+目标是在文本已经完整可见的基础上，补足图表、复杂公式、扫描页、网络拓扑、流程图、表格或排版信息。
+如果用户要求讲解整份材料、课程章节、论文或多个参考，请倾向于覆盖关键图表页和视觉密集页；不要只停留在前几页。
+你可以多轮选择视觉补充：本轮看完后，如果仍需要更多图像才能可靠回答，请将 continueReading 设为 true；如果视觉补充已经足够，请设为 false。
 文本搜索结果只是一种辅助线索。没有搜索命中并不表示参考资料中没有相关内容，也不表示用户问题无法根据参考回答。
 </instruction>
 
@@ -133,12 +134,12 @@ ${readHistory || "<NO_REFERENCE_READS_YET />"}
 </input>
 
 <tool_budget>
-- 本轮 pages 最多选择 12 页。
+- 本轮 pages 最多选择 12 页；这里的 pages 表示需要作为页面图片补充的页，不表示文本页选择。
 - 本轮 images 最多选择 3 张。
-- 优先选择尚未阅读过、且能补足当前理解缺口的页面。
+- 优先选择尚未补充过、且能补足当前视觉理解缺口的页面图片或参考图片。
 - 如果用户要求讲解整份材料，优先选择目录、总览、章节开头、关键定义/公式/图表页，而不是逐页全选。
-- 如果问题明显聚焦某一主题，优先选择主题相关页。
-- 如果文本搜索没有命中，仍要依据参考地图、页面摘要、章节标题、图表页和页面图片需求选择可能相关的页面。
+- 如果问题明显聚焦某一主题，优先选择主题相关的图、表、公式页或扫描页。
+- 如果文本搜索没有命中，仍要依据参考地图、页面摘要、章节标题、图表页和页面图片需求选择可能相关的视觉补充。
 </tool_budget>
 
 <search_result_limits>
@@ -151,7 +152,7 @@ ${readHistory || "<NO_REFERENCE_READS_YET />"}
 <json_output_protocol>
 {
   "continueReading": false,
-  "reason": "简短说明本轮选择目的，以及为什么需要或不需要继续阅读",
+  "reason": "简短说明本轮视觉补充目的，以及为什么需要或不需要继续补充",
   "pages": [
     {"documentId":"参考文档 id","pages":[1,2,3]}
   ],
@@ -162,7 +163,7 @@ ${readHistory || "<NO_REFERENCE_READS_YET />"}
 <prohibitions>
 - 只输出 JSON，不要输出解释。
 - 不要选择参考地图中不存在的 documentId、页码或图片 id。
-- 不要选择 PDF 页面截图或 <IMAGE FOR PAGE: ...> 占位图。
+- pages 只能选择参考地图中 hasPageImage="true" 或明显需要视觉理解的页面。
 </prohibitions>`;
 
 export const buildReferenceSearchTermsPrompt = (
