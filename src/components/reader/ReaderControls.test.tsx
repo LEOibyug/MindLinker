@@ -8,6 +8,10 @@ describe("ReaderToolbar", () => {
     const user = userEvent.setup();
     const handlers = {
       onGenerateExplanations: vi.fn(),
+      onSearchClear: vi.fn(),
+      onSearchNext: vi.fn(),
+      onSearchPrevious: vi.fn(),
+      onSearchQueryChange: vi.fn(),
       onViewModeChange: vi.fn()
     };
 
@@ -15,12 +19,16 @@ describe("ReaderToolbar", () => {
       <ReaderToolbar
         canGenerateExplanations={true}
         generationDisabled={false}
+        searchActiveIndex={0}
+        searchMatchCount={2}
+        searchQuery=""
         viewMode="reader"
         {...handlers}
       />
     );
 
-    expect(screen.getByText("在当前回复、解释和来源中搜索")).toBeInTheDocument();
+    await user.type(screen.getByRole("searchbox", { name: "在当前回复中搜索" }), "NAT");
+    expect(handlers.onSearchQueryChange).toHaveBeenLastCalledWith("T");
     expect(screen.getByRole("button", { name: "自动解释关键词" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "阅读器" })).toHaveClass("active");
 
@@ -34,6 +42,10 @@ describe("ReaderToolbar", () => {
   it("hides or disables explanation generation when unavailable", () => {
     const handlers = {
       onGenerateExplanations: vi.fn(),
+      onSearchClear: vi.fn(),
+      onSearchNext: vi.fn(),
+      onSearchPrevious: vi.fn(),
+      onSearchQueryChange: vi.fn(),
       onViewModeChange: vi.fn()
     };
 
@@ -41,6 +53,9 @@ describe("ReaderToolbar", () => {
       <ReaderToolbar
         canGenerateExplanations={false}
         generationDisabled={false}
+        searchActiveIndex={0}
+        searchMatchCount={0}
+        searchQuery=""
         viewMode="graph"
         {...handlers}
       />
@@ -53,12 +68,49 @@ describe("ReaderToolbar", () => {
       <ReaderToolbar
         canGenerateExplanations={true}
         generationDisabled={true}
+        searchActiveIndex={0}
+        searchMatchCount={0}
+        searchQuery=""
         viewMode="reader"
         {...handlers}
       />
     );
 
     expect(screen.getByRole("button", { name: "自动解释关键词" })).toBeDisabled();
+  });
+
+  it("shows search result navigation when a query is active", async () => {
+    const user = userEvent.setup();
+    const handlers = {
+      onGenerateExplanations: vi.fn(),
+      onSearchClear: vi.fn(),
+      onSearchNext: vi.fn(),
+      onSearchPrevious: vi.fn(),
+      onSearchQueryChange: vi.fn(),
+      onViewModeChange: vi.fn()
+    };
+
+    render(
+      <ReaderToolbar
+        canGenerateExplanations={true}
+        generationDisabled={false}
+        searchActiveIndex={1}
+        searchMatchCount={3}
+        searchQuery="NAT"
+        viewMode="reader"
+        {...handlers}
+      />
+    );
+
+    expect(screen.getByLabelText("搜索结果数量")).toHaveTextContent("2/3");
+
+    await user.click(screen.getByRole("button", { name: "上一个搜索结果" }));
+    await user.click(screen.getByRole("button", { name: "下一个搜索结果" }));
+    await user.click(screen.getByRole("button", { name: "清空搜索" }));
+
+    expect(handlers.onSearchPrevious).toHaveBeenCalledTimes(1);
+    expect(handlers.onSearchNext).toHaveBeenCalledTimes(1);
+    expect(handlers.onSearchClear).toHaveBeenCalledTimes(1);
   });
 });
 

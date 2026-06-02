@@ -57,6 +57,9 @@ export type WorkspaceContainerProps = {
   ragEnabled: boolean;
   renderedConversationExplanations: Explanation[];
   rewriteDraft: string | null;
+  searchActiveIndex: number;
+  searchMatchCount: number;
+  searchQuery: string;
   runningConversationIds: string[];
   settingsOpen: boolean;
   vectorStoreOpen: boolean;
@@ -93,6 +96,8 @@ export type WorkspaceContainerProps = {
   setNotice: StateSetter<string | null>;
   setProjectTitles: StateSetter<Record<string, string>>;
   setRewriteDraft: StateSetter<string | null>;
+  setSearchActiveIndex: StateSetter<number>;
+  setSearchQuery: StateSetter<string>;
   setVectorStoreOpen: StateSetter<boolean>;
   setViewMode: StateSetter<ViewMode>;
   switchConversation: (conversationId: string) => void;
@@ -137,6 +142,9 @@ export function WorkspaceContainer({
   ragEnabled,
   renderedConversationExplanations,
   rewriteDraft,
+  searchActiveIndex,
+  searchMatchCount,
+  searchQuery,
   runningConversationIds,
   settingsOpen,
   vectorStoreOpen,
@@ -173,6 +181,8 @@ export function WorkspaceContainer({
   setNotice,
   setProjectTitles,
   setRewriteDraft,
+  setSearchActiveIndex,
+  setSearchQuery,
   setVectorStoreOpen,
   setViewMode,
   switchConversation,
@@ -310,8 +320,22 @@ export function WorkspaceContainer({
         toolbarProps={{
           canGenerateExplanations: viewMode === "reader" && activeDraft?.modelStatus === "generated" && Boolean(activeDraft.answerMarkdown.trim()),
           generationDisabled: activeConversationRunning,
+          searchActiveIndex,
+          searchMatchCount,
+          searchQuery,
           viewMode,
           onGenerateExplanations: () => void generateExplanationsForConversation(),
+          onSearchClear: () => {
+            setSearchQuery("");
+            setSearchActiveIndex(0);
+          },
+          onSearchNext: () => {
+            setSearchActiveIndex((index) => (searchMatchCount === 0 ? 0 : (index + 1) % searchMatchCount));
+          },
+          onSearchPrevious: () => {
+            setSearchActiveIndex((index) => (searchMatchCount === 0 ? 0 : (index - 1 + searchMatchCount) % searchMatchCount));
+          },
+          onSearchQueryChange: setSearchQuery,
           onViewModeChange: setViewMode
         }}
         contentProps={{
@@ -333,6 +357,8 @@ export function WorkspaceContainer({
           renderedConversationExplanations,
           rewriteDraft,
           rewritePrompt: rewriteDraft ? buildRewritePrompt(rewriteDraft) : "",
+          searchActiveIndex,
+          searchQuery,
           viewMode,
           onApplyFullRewrite: applyFullRewrite,
           onApplyReferencePatch: applyReferencePatch,

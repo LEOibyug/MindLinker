@@ -80,6 +80,8 @@ const baseProps: ComponentProps<typeof ReaderContent> = {
   renderedConversationExplanations: explanations,
   rewriteDraft: null,
   rewritePrompt: "",
+  searchActiveIndex: 0,
+  searchQuery: "",
   viewMode: "reader",
   onApplyFullRewrite: vi.fn(),
   onApplyReferencePatch: vi.fn(),
@@ -193,6 +195,24 @@ describe("ReaderContent", () => {
 
     await user.click(screen.getByRole("button", { name: "收起正文目录" }));
     expect(screen.queryByRole("navigation", { name: "正文目录" })).not.toBeInTheDocument();
+  });
+
+  it("highlights search matches in the generated answer", () => {
+    const { container } = render(
+      <ReaderContent
+        {...baseProps}
+        activeDraft={{
+          ...generatedDraft,
+          answerMarkdown: "NAT 用于地址转换。\n\n另一个 NAT 示例。"
+        }}
+        searchActiveIndex={1}
+        searchQuery="nat"
+      />
+    );
+
+    const matches = container.querySelectorAll(".answer-search-match");
+    expect(matches).toHaveLength(2);
+    expect(matches[1]).toHaveClass("active");
   });
 
   it("keeps the answer outline as an overlay instead of widening the reader document", async () => {

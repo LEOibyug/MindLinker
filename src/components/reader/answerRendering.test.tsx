@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { renderAnswerText } from "./answerRendering";
+import { countAnswerSearchMatches, renderAnswerText } from "./answerRendering";
 
 describe("answerRendering", () => {
   it("renders model reference-image tags from parsed reference image assets", () => {
@@ -86,5 +86,17 @@ describe("answerRendering", () => {
     expect(container).not.toHaveTextContent("text 255");
     expect(container.querySelector(".formula-block")).not.toBeInTheDocument();
     expect(container.querySelector(".model-state-panel")).not.toBeInTheDocument();
+  });
+
+  it("highlights answer search matches and marks the active result", () => {
+    const answer = "NAT 可以做地址转换。\n\nUPnP 可以辅助 NAT 配置。";
+
+    const { container } = render(<article>{renderAnswerText(answer, [], false, undefined, [], undefined, undefined, [], "nat", 1)}</article>);
+
+    expect(countAnswerSearchMatches(answer, "nat")).toBe(2);
+    const matches = container.querySelectorAll(".answer-search-match");
+    expect(matches).toHaveLength(2);
+    expect(matches[0]).toHaveTextContent("NAT");
+    expect(matches[1]).toHaveClass("active");
   });
 });

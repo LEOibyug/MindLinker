@@ -5,23 +5,63 @@ export type ReaderViewMode = "reader" | "graph";
 export type ReaderToolbarProps = {
   canGenerateExplanations: boolean;
   generationDisabled: boolean;
+  searchActiveIndex: number;
+  searchMatchCount: number;
+  searchQuery: string;
   viewMode: ReaderViewMode;
   onGenerateExplanations: () => void;
+  onSearchClear: () => void;
+  onSearchNext: () => void;
+  onSearchPrevious: () => void;
+  onSearchQueryChange: (query: string) => void;
   onViewModeChange: (mode: ReaderViewMode) => void;
 };
 
 export function ReaderToolbar({
   canGenerateExplanations,
   generationDisabled,
+  searchActiveIndex,
+  searchMatchCount,
+  searchQuery,
   viewMode,
   onGenerateExplanations,
+  onSearchClear,
+  onSearchNext,
+  onSearchPrevious,
+  onSearchQueryChange,
   onViewModeChange
 }: ReaderToolbarProps) {
+  const hasSearchQuery = searchQuery.trim().length > 0;
+
   return (
     <div className="reader-toolbar">
       <div className="search-box">
         <Search aria-hidden="true" size={16} />
-        <span>在当前回复、解释和来源中搜索</span>
+        <input
+          aria-label="在当前回复中搜索"
+          type="search"
+          placeholder="在当前回复中搜索"
+          value={searchQuery}
+          onChange={(event) => onSearchQueryChange(event.target.value)}
+        />
+        {hasSearchQuery ? (
+          <span className="search-count" aria-label="搜索结果数量">
+            {searchMatchCount > 0 ? `${searchActiveIndex + 1}/${searchMatchCount}` : "0/0"}
+          </span>
+        ) : null}
+        {hasSearchQuery ? (
+          <div className="search-controls" aria-label="搜索结果导航">
+            <button type="button" aria-label="上一个搜索结果" disabled={searchMatchCount === 0} onClick={onSearchPrevious}>
+              ↑
+            </button>
+            <button type="button" aria-label="下一个搜索结果" disabled={searchMatchCount === 0} onClick={onSearchNext}>
+              ↓
+            </button>
+            <button type="button" aria-label="清空搜索" onClick={onSearchClear}>
+              ×
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="view-actions">
         {canGenerateExplanations ? (

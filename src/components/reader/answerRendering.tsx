@@ -10,6 +10,12 @@ import type { ReferenceImageAsset } from "../../services/pdfReferences";
 import { normalizePlainTextForAnchor } from "../../domain/textAnchors";
 import { buildAnswerHeadingOutline, isMarkdownListLine, normalizeMathExpression, parseAnswerBlocks } from "./answerParsing";
 
+export type AnswerSearchState = {
+  activeIndex: number;
+  nextIndex: () => number;
+  query: string;
+};
+
 type RenderInlineConversationMarker = (
   conversation: InlineConversation,
   index: number,
@@ -19,6 +25,14 @@ type RenderInlineConversationMarker = (
 ) => ReactNode;
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const countAnswerSearchMatches = (text: string, query: string) => {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    return 0;
+  }
+  return text.match(new RegExp(escapeRegExp(trimmedQuery), "gi"))?.length ?? 0;
+};
 
 const parseBoldSegments = (text: string) => {
   const segments: Array<{ text: string; bold: boolean }> = [];
@@ -61,7 +75,30 @@ export const MathExpression = ({ expression, displayMode = false }: { expression
   );
 };
 
-const renderInlineMarkdown = (text: string) => {
+const renderSearchHighlightedText = (text: string, searchState?: AnswerSearchState) => {
+  const query = searchState?.query.trim();
+  if (!searchState || !query) {
+    return text;
+  }
+  const matcher = new RegExp(`(${escapeRegExp(query)})`, "gi");
+  return text.split(matcher).map((part, index) => {
+    if (part.toLowerCase() !== query.toLowerCase()) {
+      return part;
+    }
+    const matchIndex = searchState.nextIndex();
+    return (
+      <mark
+        className={`answer-search-match ${matchIndex === searchState.activeIndex ? "active" : ""}`}
+        data-search-index={matchIndex}
+        key={`search-${index}-${matchIndex}`}
+      >
+        {part}
+      </mark>
+    );
+  });
+};
+
+const renderInlineMarkdown = (text: string, searchState?: AnswerSearchState) => {
   const parts = text.split(/(`[^`\n]+`|\*\*[^*]+\*\*|\\\([\s\S]+?\\\)|\\\$[^\n]+?\\\$|\$\$[^\n]+?\$\$|\$[^$\n]+\$)/g);
   return parts.map((part, index) => {
     if (part.startsWith("`") && part.endsWith("`")) {
@@ -75,7 +112,7 @@ const renderInlineMarkdown = (text: string) => {
       return <code className="inline-code" key={`${index}-${part}`}>{code}</code>;
     }
     if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={`${index}-${part}`}>{part.slice(2, -2)}</strong>;
+      return <strong key={`${index}-${part}`}>{renderSearchHighlightedText(part.slice(2, -2), searchState)}</strong>;
     }
     if (part.startsWith("\\(") && part.endsWith("\\)")) {
       return <MathExpression expression={normalizeMathExpression(part.slice(2, -2))} key={`${index}-${part}`} />;
@@ -89,7 +126,7 @@ const renderInlineMarkdown = (text: string) => {
     if (part.startsWith("$") && part.endsWith("$")) {
       return <MathExpression expression={normalizeMathExpression(part.slice(1, -1))} key={`${index}-${part}`} />;
     }
-    return part;
+    return renderSearchHighlightedText(part, searchState);
   });
 };
 
@@ -146,7 +183,8 @@ const renderInlineAnswerWithTerms = (
   inlineConversationMarkers: InlineConversationMarkerBinding[] = [],
   openInlineConversation: (conversation: InlineConversation) => void = () => {},
   renderInlineConversationMarker: RenderInlineConversationMarker = () => null,
-  referenceImages: ReferenceImageAsset[] = []
+  referenceImages: ReferenceImageAsset[] = [],
+  searchState?: AnswerSearchState
 ) => {
   const sortedInlineMarkers = inlineConversationMarkers
     .filter((marker) => typeof marker.offset !== "number" && marker.anchorText && text.includes(marker.anchorText))
@@ -163,7 +201,7 @@ const renderInlineAnswerWithTerms = (
   };
   const renderInlineMarkdownWithMarkers = (value: string, keyPrefix: string) => {
     if (!markerMatcher) {
-      return renderInlineMarkdown(value);
+      return renderInlineMarkdown(value, searchState);
     }
     return (
       <>
@@ -220,11 +258,25 @@ export const renderAnswerText = (
   inlineConversationMarkers: InlineConversationMarkerBinding[] = [],
   openInlineConversation: (conversation: InlineConversation) => void = () => {},
   renderInlineConversationMarker: RenderInlineConversationMarker = () => null,
-  referenceImages: ReferenceImageAsset[] = []
+  referenceImages: ReferenceImageAsset[] = [],
+  searchQuery = "",
+  searchActiveIndex = 0
 ) => {
   const textBoundTerms = bindExplanationsToAnswerText(text, terms);
   const blocks = parseAnswerBlocks(text);
   const headingOutline = buildAnswerHeadingOutline(text);
+  let searchRenderIndex = 0;
+  const searchState: AnswerSearchState | undefined = searchQuery.trim()
+    ? {
+        activeIndex: searchActiveIndex,
+        nextIndex: () => {
+          const current = searchRenderIndex;
+          searchRenderIndex += 1;
+          return current;
+        },
+        query: searchQuery
+      }
+    : undefined;
   let headingIndex = 0;
   const elements: ReactNode[] = [];
   let listItems: { id: number; content: ReactNode }[] = [];
@@ -317,7 +369,8 @@ export const renderAnswerText = (
                       inlineConversationMarkers,
                       openInlineConversation,
                       renderInlineConversationMarker,
-                      referenceImages
+                      referenceImages,
+                      searchState
                     )}
                   </th>
                 ))}
@@ -336,7 +389,8 @@ export const renderAnswerText = (
                         inlineConversationMarkers,
                         openInlineConversation,
                         renderInlineConversationMarker,
-                        referenceImages
+                        referenceImages,
+                        searchState
                       )}
                     </td>
                   ))}
@@ -373,7 +427,8 @@ export const renderAnswerText = (
                   lineMarkers,
                   openInlineConversation,
                   renderInlineConversationMarker,
-                  referenceImages
+                  referenceImages,
+                  searchState
                 )}
                 {renderLineEndMarkers(lineMarkers, `list-${listItemIndex}`)}
               </>
@@ -397,7 +452,8 @@ export const renderAnswerText = (
                 lineMarkers,
                 openInlineConversation,
                 renderInlineConversationMarker,
-                referenceImages
+                referenceImages,
+                searchState
               )}
               {renderLineEndMarkers(lineMarkers, `list-cont-${listItems.length}`)}
             </>
@@ -422,7 +478,8 @@ export const renderAnswerText = (
             lineMarkers,
             openInlineConversation,
             renderInlineConversationMarker,
-            referenceImages
+            referenceImages,
+            searchState
           );
           if (level === 1) {
             elements.push(
@@ -461,7 +518,8 @@ export const renderAnswerText = (
               lineMarkers,
               openInlineConversation,
               renderInlineConversationMarker,
-              referenceImages
+              referenceImages,
+              searchState
             )}
             {renderLineEndMarkers(lineMarkers, `p-${elements.length}`)}
           </p>
@@ -480,7 +538,9 @@ export const renderAnswerWithInlineConversations = (
   openExplanation: (term: string) => void,
   openInlineConversation: (conversation: InlineConversation) => void,
   renderInlineConversationMarker: RenderInlineConversationMarker,
-  referenceImages: ReferenceImageAsset[] = []
+  referenceImages: ReferenceImageAsset[] = [],
+  searchQuery = "",
+  searchActiveIndex = 0
 ) => {
   const anchoredItems = inlineItems
     .map((conversation, index) => {
@@ -504,6 +564,8 @@ export const renderAnswerWithInlineConversations = (
     anchoredItems,
     openInlineConversation,
     renderInlineConversationMarker,
-    referenceImages
+    referenceImages,
+    searchQuery,
+    searchActiveIndex
   );
 };

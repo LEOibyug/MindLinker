@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { renderAnswerText, renderAnswerWithInlineConversations } from "./answerRendering";
 import type { ConversationDraft } from "../../domain/conversationDrafts";
@@ -41,6 +41,8 @@ export type ReaderContentProps = {
   renderedConversationExplanations: Explanation[];
   rewriteDraft: string | null;
   rewritePrompt: string;
+  searchActiveIndex: number;
+  searchQuery: string;
   viewMode: ReaderViewMode;
   onApplyFullRewrite: () => void;
   onApplyReferencePatch: () => void;
@@ -137,6 +139,8 @@ export function ReaderContent({
   renderedConversationExplanations,
   rewriteDraft,
   rewritePrompt,
+  searchActiveIndex = 0,
+  searchQuery = "",
   viewMode,
   onApplyFullRewrite,
   onApplyReferencePatch,
@@ -147,6 +151,13 @@ export function ReaderContent({
   onRetryGeneration,
   renderInlineConversationMarker
 }: ReaderContentProps) {
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      return;
+    }
+    document.querySelector(".answer-search-match.active")?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [searchActiveIndex, searchQuery]);
+
   if (viewMode === "graph") {
     if (graphError) {
       return <GraphErrorPanel />;
@@ -201,7 +212,9 @@ export function ReaderContent({
                 onExplanationOpen,
                 onInlineConversationOpen,
                 renderInlineConversationMarker,
-                referenceImages
+                referenceImages,
+                searchQuery,
+                searchActiveIndex
               )}
             </>
           ) : activeDraft.modelStatus === "needs-configuration" || activeDraft.modelStatus === "failed" ? (

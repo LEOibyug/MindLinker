@@ -53,6 +53,8 @@ const buildProps = (overrides: Partial<ComponentProps<typeof WorkspaceView>> = {
     renderedConversationExplanations: [],
     rewriteDraft: null,
     rewritePrompt: "",
+    searchActiveIndex: 0,
+    searchQuery: "",
     viewMode: "reader",
     onApplyFullRewrite: vi.fn(),
     onApplyReferencePatch: vi.fn(),
@@ -110,8 +112,15 @@ const buildProps = (overrides: Partial<ComponentProps<typeof WorkspaceView>> = {
   toolbarProps: {
     canGenerateExplanations: true,
     generationDisabled: false,
+    searchActiveIndex: 0,
+    searchMatchCount: 0,
+    searchQuery: "",
     viewMode: "reader",
     onGenerateExplanations: vi.fn(),
+    onSearchClear: vi.fn(),
+    onSearchNext: vi.fn(),
+    onSearchPrevious: vi.fn(),
+    onSearchQueryChange: vi.fn(),
     onViewModeChange: vi.fn()
   },
   ...overrides

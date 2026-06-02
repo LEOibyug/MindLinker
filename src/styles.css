@@ -1039,8 +1039,75 @@ h3 {
   border: 1px solid #d8e1ee;
   border-radius: 8px;
   background: #fff;
-  padding: 9px 12px;
+  padding: 7px 10px;
   font-size: 13px;
+}
+
+.search-box input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #243248;
+  font: inherit;
+}
+
+.search-box input::placeholder {
+  color: #657084;
+}
+
+.search-count {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #315fbb;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 7px;
+}
+
+.search-controls {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.search-controls button {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #d8e1ee;
+  border-radius: 6px;
+  background: #fff;
+  color: #52637c;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.search-controls button:hover:not(:disabled) {
+  border-color: #9eb9e3;
+  color: #2657a4;
+}
+
+.search-controls button:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
+.answer-search-match {
+  border-radius: 4px;
+  background: #fff0a8;
+  color: inherit;
+  padding: 0 2px;
+}
+
+.answer-search-match.active {
+  background: #ffd166;
+  box-shadow: 0 0 0 2px rgba(255, 209, 102, .4);
 }
 
 .answer-document {

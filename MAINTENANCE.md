@@ -12,6 +12,12 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Reader Main Answer Search
+
+- Replaced the static toolbar search placeholder with a real search box for the current generated answer.
+- Search now highlights matches in the main answer, shows result counts, and supports previous/next navigation with active-match scrolling.
+- Scoped the feature to the main answer text to avoid implying source or explanation search until those surfaces are implemented.
+
 ### 2026-06-02 - Larger Answer Outline Popover
 
 - Enlarged the reader outline popover so it behaves more like a practical side overview instead of a compact tooltip.

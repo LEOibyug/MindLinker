@@ -29,6 +29,7 @@ import { useHomeProjectActions } from "./hooks/useHomeProjectActions";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { useAppDerivedState } from "./hooks/useAppDerivedState";
 import { useConversationStatusActions } from "./hooks/useConversationStatusActions";
+import { countAnswerSearchMatches } from "../components/reader/answerRendering";
 
 const deleteConfirmationTimeoutMs = 6000;
 
@@ -114,6 +115,8 @@ export function App() {
   );
   const [referencePlanId, setReferencePlanId] = useState<string | null>(null);
   const [appliedPatch, setAppliedPatch] = useState(false);
+  const [readerSearchQuery, setReaderSearchQuery] = useState("");
+  const [readerSearchActiveIndex, setReaderSearchActiveIndex] = useState(0);
 
   const activeProviderId = getActiveProviderId(customProviders, activeProviderIdState);
   const {
@@ -245,6 +248,19 @@ export function App() {
     generationPhase === "content" && (!notice || notice === "正在请求主模型")
       ? generationHints[generationHintIndex % generationHints.length]
       : notice;
+  const readerSearchMatchCount = countAnswerSearchMatches(activeDraft?.answerMarkdown ?? "", readerSearchQuery);
+  const normalizedReaderSearchActiveIndex =
+    readerSearchMatchCount === 0 ? 0 : Math.min(readerSearchActiveIndex, readerSearchMatchCount - 1);
+
+  useEffect(() => {
+    setReaderSearchActiveIndex(0);
+  }, [activeConversation.id, readerSearchQuery]);
+
+  useEffect(() => {
+    if (readerSearchActiveIndex >= readerSearchMatchCount && readerSearchMatchCount > 0) {
+      setReaderSearchActiveIndex(readerSearchMatchCount - 1);
+    }
+  }, [readerSearchActiveIndex, readerSearchMatchCount]);
 
   const {
     addProvider,
@@ -549,6 +565,9 @@ export function App() {
         ragEnabled={ragEnabled}
         renderedConversationExplanations={renderedConversationExplanations}
         rewriteDraft={rewriteDraft}
+        searchActiveIndex={normalizedReaderSearchActiveIndex}
+        searchMatchCount={readerSearchMatchCount}
+        searchQuery={readerSearchQuery}
         runningConversationIds={runningConversationIds}
         settingsOpen={settingsOpen}
         vectorStoreOpen={vectorStoreOpen}
@@ -585,6 +604,8 @@ export function App() {
         setNotice={setNotice}
         setProjectTitles={setProjectTitles}
         setRewriteDraft={setRewriteDraft}
+        setSearchActiveIndex={setReaderSearchActiveIndex}
+        setSearchQuery={setReaderSearchQuery}
         setVectorStoreOpen={setVectorStoreOpen}
         setViewMode={setViewMode}
         switchConversation={switchConversation}
