@@ -12,6 +12,15 @@ This project now uses git commits as bug-fix checkpoints.
 
 ## Log
 
+### 2026-06-02 - Folder-Based Tool Reports
+
+- Updated the interaction export and reference inspection CLIs to default to folder outputs:
+  - `report.md` for the human-readable report;
+  - `assets/` for extracted image files referenced by Markdown.
+- Kept legacy `.md` / `.json` output paths compatible, with sibling `*-assets/` folders for extracted images.
+- Replaced default data-url image previews in Markdown reports with relative asset paths, including OpenAI input part previews and runtime-log metadata.
+- Updated README tool examples to use folder outputs.
+
 ### 2026-06-02 - Reference Parse Inspector Tool
 
 - Added a standalone reference-inspection CLI that accepts a local file and exports the parsed MindLinker reference structure as Markdown or JSON.

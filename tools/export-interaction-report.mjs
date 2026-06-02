@@ -19,8 +19,8 @@ const parseArgs = (argv) => {
     userData: defaultUserDataDir(),
     logs: [],
     state: "",
-    out: path.resolve("mindlinker-interaction-report.md"),
-    extractImages: false,
+    out: path.resolve("mindlinker-interaction-report"),
+    extractImages: true,
     all: false,
     since: "",
     until: "",
@@ -45,6 +45,8 @@ const parseArgs = (argv) => {
       options.out = path.resolve(argv[++index] ?? "");
     } else if (arg === "--extract-images") {
       options.extractImages = true;
+    } else if (arg === "--no-extract-images") {
+      options.extractImages = false;
     } else if (arg === "--all") {
       options.all = true;
     } else if (arg === "--since") {
@@ -89,8 +91,9 @@ Options:
   --user-data <dir>       Electron userData directory. Defaults to the current platform's MindLinker directory.
   --logs <file-or-dir>    Runtime log file or directory. Can be repeated. Defaults to <user-data>/runtime-logs.
   --state <file>          JSON file containing exported localStorage state or raw MindLinker storage keys.
-  --out, -o <file>        Markdown output path. Defaults to ./mindlinker-interaction-report.md.
-  --extract-images        Write data-url images to an assets folder and link them from the report.
+  --out, -o <path>        Output folder, or a .md file path for legacy single-file mode. Defaults to ./mindlinker-interaction-report.
+  --extract-images        Write data-url images to assets/ and link them from the report. Enabled by default.
+  --no-extract-images     Keep image data-url previews in Markdown instead of writing files.
   --all                   Export all available projects/logs. By default, exports the latest conversation.
   --since <date>          Keep logs at or after this date/time, e.g. 2026-06-02 or 2026-06-02T01:00:00Z.
   --until <date>          Keep logs before this date/time.
@@ -377,34 +380,82 @@ const safeFilePart = (value) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "asset";
 
-const writeDataUrlAsset = async (dataUrl, outPath, baseName) => {
+const resolveOutputPaths = (outPath, json = false) => {
+  const isMarkdownFile = /\.md$/i.test(outPath);
+  const isJsonFile = /\.json$/i.test(outPath);
+  if (isMarkdownFile || isJsonFile) {
+    const reportPath = outPath;
+    return {
+      outputDir: path.dirname(reportPath),
+      reportPath,
+      assetsDir: `${reportPath.replace(/\.(md|json)$/i, "")}-assets`
+    };
+  }
+  const outputDir = outPath;
+  return {
+    outputDir,
+    reportPath: path.join(outputDir, json ? "report.json" : "report.md"),
+    assetsDir: path.join(outputDir, "assets")
+  };
+};
+
+const writeDataUrlAsset = async (dataUrl, options, baseName) => {
+  if (options.dataUrlAssetPaths?.has(dataUrl)) {
+    return options.dataUrlAssetPaths.get(dataUrl);
+  }
   const match = /^data:([^;,]+)(?:;[^,]*)?,(.*)$/s.exec(dataUrl);
   if (!match) {
     return null;
   }
   const mime = match[1];
   const ext = mime.includes("png") ? "png" : mime.includes("jpeg") || mime.includes("jpg") ? "jpg" : mime.includes("webp") ? "webp" : "bin";
-  const assetsDir = `${outPath.replace(/\.md$/i, "")}-assets`;
-  await fs.mkdir(assetsDir, { recursive: true });
-  const filePath = path.join(assetsDir, `${safeFilePart(baseName)}.${ext}`);
+  await fs.mkdir(options.assetsDir, { recursive: true });
+  const filePath = path.join(options.assetsDir, `${safeFilePart(baseName)}.${ext}`);
   await fs.writeFile(filePath, Buffer.from(match[2], "base64"));
-  return path.relative(path.dirname(outPath), filePath).replaceAll(path.sep, "/");
+  const relativePath = path.relative(path.dirname(options.reportPath), filePath).replaceAll(path.sep, "/");
+  options.dataUrlAssetPaths?.set(dataUrl, relativePath);
+  return relativePath;
 };
 
-const renderMetadata = (metadata, maxChars) => {
+const replaceDataUrlsForReport = async (value, options, pathParts = []) => {
+  if (typeof value === "string") {
+    if (!options.extractImages || !value.startsWith("data:image/")) {
+      return value;
+    }
+    return (await writeDataUrlAsset(value, options, pathParts.join("-") || "metadata-image")) ?? value;
+  }
+  if (Array.isArray(value)) {
+    const result = [];
+    for (let index = 0; index < value.length; index += 1) {
+      result.push(await replaceDataUrlsForReport(value[index], options, [...pathParts, String(index)]));
+    }
+    return result;
+  }
+  if (value && typeof value === "object") {
+    const entries = [];
+    for (const [key, item] of Object.entries(value)) {
+      entries.push([key, await replaceDataUrlsForReport(item, options, [...pathParts, key])]);
+    }
+    return Object.fromEntries(entries);
+  }
+  return value;
+};
+
+const renderMetadata = async (metadata, options) => {
   if (!metadata || Object.keys(metadata).length === 0) {
     return "";
   }
-  return `\n\n\`\`\`json\n${truncate(JSON.stringify(metadata, null, 2), maxChars)}\n\`\`\``;
+  const reportMetadata = await replaceDataUrlsForReport(metadata, options, ["metadata"]);
+  return `\n\n\`\`\`json\n${truncate(JSON.stringify(reportMetadata, null, 2), options.maxLogChars)}\n\`\`\``;
 };
 
-const renderLogEntry = (entry, options) => {
+const renderLogEntry = async (entry, options) => {
   const metadata = entry.metadata ?? {};
   if (metadata.answer || metadata.rawText || metadata.rawTitle) {
     const body = metadata.answer ?? metadata.rawText ?? metadata.rawTitle;
     return `### ${entry.timestamp || "No timestamp"} · ${entry.scope}/${entry.message}\n\n${truncate(body, options.maxLogChars)}\n`;
   }
-  return `### ${entry.timestamp || "No timestamp"} · ${entry.scope}/${entry.message}\n\n- level: \`${entry.level ?? "info"}\`${renderMetadata(metadata, options.maxLogChars)}\n`;
+  return `### ${entry.timestamp || "No timestamp"} · ${entry.scope}/${entry.message}\n\n- level: \`${entry.level ?? "info"}\`${await renderMetadata(metadata, options)}\n`;
 };
 
 const groupLogs = (logs) => {
@@ -432,7 +483,7 @@ const renderReferences = async (documents, options) => {
       for (const image of images) {
         const label = `${image.id ?? "image"} · ${image.alt ?? ""}`.trim();
         if (options.extractImages && image.dataUrl) {
-          const assetPath = await writeDataUrlAsset(image.dataUrl, options.out, image.id ?? label);
+          const assetPath = await writeDataUrlAsset(image.dataUrl, options, image.id ?? label);
           sections.push(assetPath ? `![${label}](${assetPath})\n\n` : `- \`${code(image.id)}\` ${image.alt ?? ""}\n`);
         } else {
           sections.push(`- \`${code(image.id)}\` page ${image.pageNumber ?? "?"}: ${image.alt ?? ""}${image.dataUrl ? ` · dataUrl: \`${truncate(image.dataUrl, options.maxImageDataChars)}\`` : ""}\n`);
@@ -543,7 +594,9 @@ const buildReport = async (state, logs, options) => {
   } else {
     for (const [key, entries] of groupedLogs.entries()) {
       lines.push(`## ${key}`);
-      entries.forEach((entry) => lines.push(renderLogEntry(entry, options)));
+      for (const entry of entries) {
+        lines.push(await renderLogEntry(entry, options));
+      }
     }
   }
   return lines.join("\n");
@@ -555,6 +608,8 @@ const main = async () => {
     printHelp();
     return;
   }
+  Object.assign(options, resolveOutputPaths(options.out));
+  options.dataUrlAssetPaths = new Map();
   const loadedState = await loadState(options);
   const logs = [
     ...(Array.isArray(loadedState.runtimeLogs) ? loadedState.runtimeLogs : []),
@@ -572,9 +627,9 @@ const main = async () => {
     return true;
   });
   const report = await buildReport(state, uniqueLogs, scopedOptions);
-  await fs.mkdir(path.dirname(options.out), { recursive: true });
-  await fs.writeFile(options.out, report, "utf8");
-  console.log(`Wrote ${options.out}`);
+  await fs.mkdir(options.outputDir, { recursive: true });
+  await fs.writeFile(options.reportPath, report, "utf8");
+  console.log(`Wrote ${options.reportPath}`);
 };
 
 main().catch((error) => {

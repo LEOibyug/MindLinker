@@ -15,7 +15,7 @@ const parseArgs = (argv) => {
     projectId: "inspect-project",
     index: 0,
     ragEnabled: false,
-    extractImages: false,
+    extractImages: true,
     json: false,
     maxPageChars: 4000,
     maxImageDataChars: 160
@@ -34,6 +34,8 @@ const parseArgs = (argv) => {
       options.ragEnabled = true;
     } else if (arg === "--extract-images") {
       options.extractImages = true;
+    } else if (arg === "--no-extract-images") {
+      options.extractImages = false;
     } else if (arg === "--json") {
       options.json = true;
     } else if (arg === "--max-page-chars") {
@@ -57,9 +59,10 @@ Usage:
   npm run inspect:reference -- <file> [options]
 
 Options:
-  --out, -o <file>        Output path. Defaults to ./temp/<filename>.reference.md or .json.
+  --out, -o <path>        Output folder, or a .md/.json file path for legacy single-file mode. Defaults to ./temp/<filename>.reference.
   --json                  Write the raw parsed reference JSON instead of Markdown.
-  --extract-images        Write data-url images to a sibling assets folder and link them from Markdown.
+  --extract-images        Write data-url images to assets/ and link them from Markdown. Enabled by default.
+  --no-extract-images     Keep image data-url previews in Markdown instead of writing files.
   --rag                   Mark parsed status as indexing, matching RAG-enabled imports.
   --project-id <id>       Project id used to build deterministic-looking reference ids.
   --index <n>             Reference index used in the generated id.
@@ -334,18 +337,42 @@ const safeFilePart = (value) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "asset";
 
-const writeDataUrlAsset = async (dataUrl, outPath, baseName) => {
+const resolveOutputPaths = (outPath, json = false) => {
+  const isMarkdownFile = /\.md$/i.test(outPath);
+  const isJsonFile = /\.json$/i.test(outPath);
+  if (isMarkdownFile || isJsonFile) {
+    const reportPath = outPath;
+    return {
+      outputDir: path.dirname(reportPath),
+      reportPath,
+      assetsDir: `${reportPath.replace(/\.(md|json)$/i, "")}-assets`
+    };
+  }
+  const outputDir = outPath;
+  return {
+    outputDir,
+    reportPath: path.join(outputDir, json ? "report.json" : "report.md"),
+    assetsDir: path.join(outputDir, "assets")
+  };
+};
+
+const writeDataUrlAsset = async (dataUrl, options, baseName) => {
+  const assetKey = `${safeFilePart(baseName)}:${dataUrl}`;
+  if (options.dataUrlAssetPaths?.has(assetKey)) {
+    return options.dataUrlAssetPaths.get(assetKey);
+  }
   const match = /^data:([^;,]+)(?:;[^,]*)?,(.*)$/s.exec(dataUrl);
   if (!match) {
     return null;
   }
   const mime = match[1];
   const ext = mime.includes("png") ? "png" : mime.includes("jpeg") || mime.includes("jpg") ? "jpg" : mime.includes("webp") ? "webp" : "bin";
-  const assetsDir = `${outPath.replace(/\.md$/i, "")}-assets`;
-  await fs.mkdir(assetsDir, { recursive: true });
-  const filePath = path.join(assetsDir, `${safeFilePart(baseName)}.${ext}`);
+  await fs.mkdir(options.assetsDir, { recursive: true });
+  const filePath = path.join(options.assetsDir, `${safeFilePart(baseName)}.${ext}`);
   await fs.writeFile(filePath, Buffer.from(match[2], "base64"));
-  return path.relative(path.dirname(outPath), filePath).replaceAll(path.sep, "/");
+  const relativePath = path.relative(path.dirname(options.reportPath), filePath).replaceAll(path.sep, "/");
+  options.dataUrlAssetPaths?.set(assetKey, relativePath);
+  return relativePath;
 };
 
 const renderImages = async (document, options) => {
@@ -356,7 +383,7 @@ const renderImages = async (document, options) => {
   const lines = [];
   for (const image of images) {
     if (options.extractImages && image.dataUrl) {
-      const assetPath = await writeDataUrlAsset(image.dataUrl, options.out, image.id);
+      const assetPath = await writeDataUrlAsset(image.dataUrl, options, image.id);
       lines.push(assetPath ? `![${image.alt}](${assetPath})\n` : `- \`${code(image.id)}\` ${image.alt}`);
     } else {
       lines.push(`- \`${code(image.id)}\` page ${image.pageNumber ?? "?"}: ${image.alt}`);
@@ -374,13 +401,33 @@ const renderImageInputs = async (document, options) => {
   const lines = [];
   for (const page of pagesWithImages) {
     if (options.extractImages && page.imageDataUrl) {
-      const assetPath = await writeDataUrlAsset(page.imageDataUrl, options.out, `${document.id}-page-${page.pageNumber}`);
+      const assetPath = await writeDataUrlAsset(page.imageDataUrl, options, `${document.id}-page-${page.pageNumber}`);
       lines.push(assetPath ? `![${document.title} page ${page.pageNumber}](${assetPath})\n` : `- Page ${page.pageNumber}`);
     } else {
       lines.push(`- Page ${page.pageNumber}: \`${truncate(page.imageDataUrl, 160)}\``);
     }
   }
   return lines.join("\n");
+};
+
+const renderInputPartsPreview = async (inputParts, options) => {
+  const previewParts = [];
+  for (let index = 0; index < inputParts.length; index += 1) {
+    const part = inputParts[index];
+    if (part.type === "input_image") {
+      const assetPath =
+        options.extractImages && part.image_url?.startsWith("data:image/")
+          ? await writeDataUrlAsset(part.image_url, options, `openai-input-image-${index + 1}`)
+          : null;
+      previewParts.push({
+        ...part,
+        image_url: assetPath ?? truncate(part.image_url, options.maxImageDataChars)
+      });
+    } else {
+      previewParts.push({ ...part, text: truncate(part.text, 1200) });
+    }
+  }
+  return JSON.stringify(previewParts, null, 2);
 };
 
 const renderMarkdown = async (document, options) => {
@@ -441,23 +488,13 @@ const renderMarkdown = async (document, options) => {
   lines.push("## OpenAI Input Parts Preview");
   lines.push("");
   lines.push("```json");
-  lines.push(
-    JSON.stringify(
-      inputParts.map((part) =>
-        part.type === "input_image"
-          ? { ...part, image_url: truncate(part.image_url, 120) }
-          : { ...part, text: truncate(part.text, 1200) }
-      ),
-      null,
-      2
-    )
-  );
+  lines.push(await renderInputPartsPreview(inputParts, options));
   lines.push("```");
   return lines.join("\n");
 };
 
 const defaultOutPath = (options) => {
-  const fileName = `${safeFilePart(path.basename(options.input))}.reference.${options.json ? "json" : "md"}`;
+  const fileName = `${safeFilePart(path.basename(options.input))}.reference`;
   return path.resolve("temp", fileName);
 };
 
@@ -474,14 +511,16 @@ const main = async () => {
     throw new Error(`File not found: ${options.input}`);
   }
   options.out = options.out || defaultOutPath(options);
+  Object.assign(options, resolveOutputPaths(options.out, options.json));
+  options.dataUrlAssetPaths = new Map();
   const document = await parseReferenceFileFromPath({ ...options, filePath: options.input });
-  await fs.mkdir(path.dirname(options.out), { recursive: true });
+  await fs.mkdir(options.outputDir, { recursive: true });
   if (options.json) {
-    await fs.writeFile(options.out, JSON.stringify(document, null, 2), "utf8");
+    await fs.writeFile(options.reportPath, JSON.stringify(document, null, 2), "utf8");
   } else {
-    await fs.writeFile(options.out, await renderMarkdown(document, options), "utf8");
+    await fs.writeFile(options.reportPath, await renderMarkdown(document, options), "utf8");
   }
-  console.log(`Wrote ${options.out}`);
+  console.log(`Wrote ${options.reportPath}`);
 };
 
 main().catch((error) => {
